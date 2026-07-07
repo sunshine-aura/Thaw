@@ -3655,6 +3655,76 @@ extension MenuBarItemManager {
         }
     }
 
+    enum LayoutResetDirection {
+        case towardHidden(anchor: MenuBarItem)
+        case towardVisible(hiddenDivider: MenuBarItem)
+
+        func moveDestination(controlItems: ControlItemPair) -> MoveDestination {
+            switch self {
+            case .towardHidden:
+                .leftOfItem(controlItems.hidden)
+            case .towardVisible:
+                .rightOfItem(controlItems.hidden)
+            }
+        }
+
+        func isNotYetInTarget(
+            item _: MenuBarItem,
+            bounds: CGRect,
+            hiddenBounds: CGRect,
+            alwaysHiddenBounds: CGRect?
+        ) -> Bool {
+            switch self {
+            case .towardHidden:
+                if bounds.minX >= hiddenBounds.maxX {
+                    return true
+                }
+                if let alwaysHiddenBounds, bounds.maxX <= alwaysHiddenBounds.minX {
+                    return true
+                }
+                return false
+            case .towardVisible:
+                return bounds.minX < hiddenBounds.maxX
+            }
+        }
+
+        var movesAllCandidatesInFirstPass: Bool {
+            switch self {
+            case .towardHidden:
+                true
+            case .towardVisible:
+                false
+            }
+        }
+
+        var failureLogLabel: String {
+            switch self {
+            case .towardHidden:
+                "layout reset"
+            case .towardVisible:
+                "reset-to-visible"
+            }
+        }
+
+        var secondPassLogLabel: String {
+            switch self {
+            case .towardHidden:
+                "Layout reset"
+            case .towardVisible:
+                "Reset-to-visible"
+            }
+        }
+
+        var resetsNewLeftmostRelocationSuppression: Bool {
+            switch self {
+            case .towardHidden:
+                true
+            case .towardVisible:
+                false
+            }
+        }
+    }
+
     /// Returns the default timeout for move operations associated
     /// with the given item.
     private func getDefaultMoveOperationTimeout(for item: MenuBarItem) -> Duration {
@@ -6894,7 +6964,48 @@ extension MenuBarItemManager {
             appState.hidEventManager.startAll()
         }
 
-        func movePass(_ items: [MenuBarItem], anchor: MenuBarItem) async -> Int {
+        try await resetLayoutWithControlItems(
+            controlItems: controlItems,
+            items: items,
+            direction: .towardHidden(anchor: controlItems.hidden)
+        )
+    }
+
+    private func resetLayoutWithControlItems(
+        controlItems: ControlItemPair,
+        items: [MenuBarItem],
+        direction: LayoutResetDirection
+    ) async throws -> Int {
+        func controlBounds(for controlItems: ControlItemPair) -> (hidden: CGRect, alwaysHidden: CGRect?) {
+            let hiddenBounds = Bridging.getWindowBounds(for: controlItems.hidden.windowID)
+                ?? controlItems.hidden.bounds
+            let alwaysHiddenBounds = controlItems.alwaysHidden.flatMap {
+                Bridging.getWindowBounds(for: $0.windowID) ?? $0.bounds
+            }
+            return (hiddenBounds, alwaysHiddenBounds)
+        }
+
+        func isResetCandidate(_ item: MenuBarItem) -> Bool {
+            item.isMovable && item.canBeHidden && !item.isControlItem && item.tag != .visibleControlItem
+        }
+
+        func itemsNotInTarget(_ items: [MenuBarItem], controlItems: ControlItemPair) -> [MenuBarItem] {
+            let bounds = controlBounds(for: controlItems)
+            return items.filter { item in
+                guard isResetCandidate(item) else {
+                    return false
+                }
+                let itemBounds = Bridging.getWindowBounds(for: item.windowID) ?? item.bounds
+                return direction.isNotYetInTarget(
+                    item: item,
+                    bounds: itemBounds,
+                    hiddenBounds: bounds.hidden,
+                    alwaysHiddenBounds: bounds.alwaysHidden
+                )
+            }
+        }
+
+        func movePass(_ items: [MenuBarItem], controlItems: ControlItemPair) async -> Int {
             var failed = 0
             for item in items {
                 if item.tag == .visibleControlItem {
@@ -6908,19 +7019,22 @@ extension MenuBarItemManager {
                 do {
                     try await move(
                         item: item,
-                        to: .leftOfItem(anchor),
+                        to: direction.moveDestination(controlItems: controlItems),
                         skipInputPause: true,
                         watchdogTimeout: Self.layoutWatchdogTimeout
                     )
                 } catch {
                     failed += 1
-                    MenuBarItemManager.diagLog.error("Failed to move \(item.logString) during layout reset: \(error)")
+                    MenuBarItemManager.diagLog.error("Failed to move \(item.logString) during \(direction.failureLogLabel): \(error)")
                 }
             }
             return failed
         }
 
-        _ = await movePass(items, anchor: controlItems.hidden)
+        let initialItems = direction.movesAllCandidatesInFirstPass
+            ? items
+            : itemsNotInTarget(items, controlItems: controlItems)
+        _ = await movePass(initialItems, controlItems: controlItems)
 
         // Give macOS a moment to settle after the first pass.
         try? await Task.sleep(for: .milliseconds(200))
@@ -6969,9 +7083,15 @@ extension MenuBarItemManager {
                 }
                 return false
             }
-            if !notYetInHidden.isEmpty {
-                MenuBarItemManager.diagLog.debug("Layout reset pass 2: \(notYetInHidden.count) items not yet in hidden section")
-                failedMoves = await movePass(notYetInHidden, anchor: refreshedControls.hidden)
+            let notYetInTarget: [MenuBarItem] = switch direction {
+            case .towardHidden:
+                notYetInHidden
+            case .towardVisible:
+                itemsNotInTarget(refreshedItems, controlItems: refreshedControls)
+            }
+            if !notYetInTarget.isEmpty {
+                MenuBarItemManager.diagLog.debug("\(direction.secondPassLogLabel) pass 2: \(notYetInTarget.count) items not yet in target section")
+                failedMoves = await movePass(notYetInTarget, controlItems: refreshedControls)
             }
         }
 
@@ -6983,7 +7103,9 @@ extension MenuBarItemManager {
                 await self?.cacheItemsRegardless(skipRecentMoveCheck: true)
             }
         }
-        suppressNextNewLeftmostItemRelocation = false
+        if direction.resetsNewLeftmostRelocationSuppression {
+            suppressNextNewLeftmostItemRelocation = false
+        }
 
         await MainActor.run {
             appState.imageCache.clearAll()
@@ -7141,111 +7263,11 @@ extension MenuBarItemManager {
         controlItems: ControlItemPair,
         items: [MenuBarItem]
     ) async throws -> Int {
-        guard let appState else {
-            throw LayoutResetError.missingAppState
-        }
-
-        appState.menuBarManager.iceBarPanel.close()
-
-        appState.hidEventManager.stopAll()
-        defer {
-            appState.hidEventManager.startAll()
-        }
-
-        let hiddenControlBounds = Bridging.getWindowBounds(for: controlItems.hidden.windowID)
-            ?? controlItems.hidden.bounds
-
-        func itemsNotInVisible(_ items: [MenuBarItem]) -> [MenuBarItem] {
-            items.filter { item in
-                guard item.isMovable, item.canBeHidden, !item.isControlItem,
-                      item.tag != .visibleControlItem
-                else {
-                    return false
-                }
-                let bounds = Bridging.getWindowBounds(for: item.windowID) ?? item.bounds
-                return bounds.minX < hiddenControlBounds.maxX
-            }
-        }
-
-        func movePass(_ items: [MenuBarItem]) async -> Int {
-            var failed = 0
-            for item in items {
-                do {
-                    try await move(
-                        item: item,
-                        to: .rightOfItem(controlItems.hidden),
-                        skipInputPause: true,
-                        watchdogTimeout: Self.layoutWatchdogTimeout
-                    )
-                } catch {
-                    failed += 1
-                    MenuBarItemManager.diagLog.error("Failed to move \(item.logString) during reset-to-visible: \(error)")
-                }
-            }
-            return failed
-        }
-
-        var failedMoves = await movePass(itemsNotInVisible(items))
-
-        try? await Task.sleep(for: .milliseconds(200))
-
-        var refreshedItems = await MenuBarItem.getMenuBarItems(option: .activeSpace)
-        let refreshHiddenWID: CGWindowID? = appState.menuBarManager
-            .controlItem(withName: .hidden)?.window
-            .flatMap { CGWindowID(exactly: $0.windowNumber) }
-        let refreshAlwaysHiddenWID: CGWindowID? = appState.menuBarManager
-            .controlItem(withName: .alwaysHidden)?.window
-            .flatMap { CGWindowID(exactly: $0.windowNumber) }
-        if let refreshedControls = ControlItemPair(
-            items: &refreshedItems,
-            hiddenControlItemWindowID: refreshHiddenWID,
-            alwaysHiddenControlItemWindowID: refreshAlwaysHiddenWID
-        ) {
-            let refreshedHiddenBounds = Bridging.getWindowBounds(for: refreshedControls.hidden.windowID)
-                ?? refreshedControls.hidden.bounds
-            let notYetInVisible = refreshedItems.filter { item in
-                guard item.isMovable, item.canBeHidden, !item.isControlItem,
-                      item.tag != .visibleControlItem
-                else {
-                    return false
-                }
-                let bounds = Bridging.getWindowBounds(for: item.windowID) ?? item.bounds
-                return bounds.minX < refreshedHiddenBounds.maxX
-            }
-            if !notYetInVisible.isEmpty {
-                MenuBarItemManager.diagLog.debug("Reset-to-visible pass 2: \(notYetInVisible.count) items not yet in visible section")
-                failedMoves += await movePass(notYetInVisible)
-            }
-        }
-
-        cacheActor.clearCachedItemWindowIDs()
-        itemCache = ItemCache(displayID: nil)
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            self.backgroundCacheContinuation = continuation
-            Task { [weak self] in
-                await self?.cacheItemsRegardless(skipRecentMoveCheck: true)
-            }
-        }
-
-        await MainActor.run {
-            appState.imageCache.clearAll()
-            appState.imageCache.performCacheCleanup()
-        }
-
-        if itemCache.displayID != nil {
-            await appState.imageCache.updateCacheWithoutChecks(sections: MenuBarSection.Name.allCases)
-        } else {
-            try? await Task.sleep(for: .milliseconds(350))
-            await appState.imageCache.updateCacheWithoutChecks(sections: MenuBarSection.Name.allCases)
-        }
-
-        await MainActor.run {
-            appState.objectWillChange.send()
-        }
-
-        NSScreen.invalidateMenuBarHeightCache()
-
-        return failedMoves
+        try await resetLayoutWithControlItems(
+            controlItems: controlItems,
+            items: items,
+            direction: .towardVisible(hiddenDivider: controlItems.hidden)
+        )
     }
 
     /// Ends an in-flight settling period immediately. Used by paths that
