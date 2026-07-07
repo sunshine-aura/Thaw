@@ -146,6 +146,45 @@ final class SimpleItemHiderTests: XCTestCase {
         }
     }
 
+    /// A position store whose `hideItems` returns a caller-supplied set of plist
+    /// keys, letting a test assert how `applyExperimentalWindowHiding` maps those
+    /// returned keys back onto live items when stripping the assertion input.
+    final class KeyReturningFakePositionStore: TrailingItemPositioning {
+        var storedPositions: [String: Int]
+        let hideReturnKeys: Set<String>
+        private(set) var hasHiddenItems = false
+        private(set) var lockedVisibleKeys: Set<String> = []
+
+        init(storedPositions: [String: Int], hideReturnKeys: Set<String>) {
+            self.storedPositions = storedPositions
+            self.hideReturnKeys = hideReturnKeys
+        }
+
+        func readPositions() -> [String: Int] {
+            storedPositions
+        }
+
+        func writePositions(_ dict: [String: Int]) {
+            storedPositions = dict
+        }
+
+        func restoreAll() {}
+
+        func hideItems(_: [MenuBarItem]) -> Set<String> {
+            hasHiddenItems = true
+            return hideReturnKeys
+        }
+
+        func showItems(_: [MenuBarItem], allItems _: [MenuBarItem]) -> Set<String> {
+            []
+        }
+
+        func lockVisiblePositions(visibleItemKeys: Set<String>, allItems _: [MenuBarItem]) -> Set<String> {
+            lockedVisibleKeys = visibleItemKeys
+            return visibleItemKeys
+        }
+    }
+
     private var backend: FakeAssessmentModeBackend!
     private var ccModuleManager: FakeControlCenterModuleManager!
     private var cgsWindowHider: FakeCGSWindowHider!
@@ -241,6 +280,78 @@ final class SimpleItemHiderTests: XCTestCase {
 
         // Assert AX only received the PID that CGS didn't handle.
         XCTAssertEqual(axHider.lastReceivedPIDs, [axHandledPID], "AX should only receive PIDs not handled by CGS")
+    }
+
+    func testExperimentalWindowHidingStripsAssertionUsingResolvedKeyNotNaiveKey() {
+        // Regression: iStat-style items rewrite their AX title every second while
+        // registering under a stable internal identifier. `hideItems` returns the
+        // stable plist key; the assertion-strip pass must map the live item back
+        // to that same stable key via the shared positional resolver — NOT the
+        // naive `status:<bundle>::<title>` key, which never matches the stored
+        // key and would leave the item in BOTH the plist set and the assertion
+        // input, forcing a whole-bar reflow.
+        let namespace = "com.bjango.istatmenus"
+        let cpuKey = "status:\(namespace)::com.bjango.istatmenus.cpu"
+        let memKey = "status:\(namespace)::com.bjango.istatmenus.mem"
+
+        // Two siblings with dynamic titles that match neither stable key.
+        let cpuItem = MenuBarItem(
+            tag: MenuBarItemTag(namespace: .string(namespace), title: "CPU 10%", windowID: 1, instanceIndex: 0),
+            windowID: 1,
+            ownerPID: 900,
+            sourcePID: 900,
+            bounds: CGRect(x: 0, y: 0, width: 20, height: 22),
+            title: "CPU 10%",
+            isOnScreen: true
+        )
+        let memItem = MenuBarItem(
+            tag: MenuBarItemTag(namespace: .string(namespace), title: "MEM 40%", windowID: 2, instanceIndex: 0),
+            windowID: 2,
+            ownerPID: 900,
+            sourcePID: 900,
+            bounds: CGRect(x: 30, y: 0, width: 20, height: 22),
+            title: "MEM 40%",
+            isOnScreen: true
+        )
+        let allItems = [cpuItem, memItem]
+
+        // The plist stores the stable keys; the naive dynamic-title keys are
+        // absent, so only positional resolution can pair them.
+        let positionStore = KeyReturningFakePositionStore(
+            storedPositions: [cpuKey: 100, memKey: 200],
+            hideReturnKeys: [cpuKey, memKey]
+        )
+        let hider = SimpleItemHider(
+            appState: nil,
+            backend: FakeAssessmentModeBackend(),
+            ccModuleManager: FakeControlCenterModuleManager(),
+            cgsWindowHider: FakeCGSWindowHider(),
+            axItemHider: FakeAXItemHider(),
+            positionStore: positionStore
+        )
+
+        var backendAssignment: [String: MenuBarSection.Name] = [
+            cpuItem.uniqueIdentifier: .hidden,
+            memItem.uniqueIdentifier: .hidden,
+        ]
+
+        hider.applyExperimentalWindowHiding(
+            enabled: true,
+            effectiveAssignment: backendAssignment,
+            allItems: allItems,
+            backendAssignment: &backendAssignment
+        )
+
+        // Both items were resolved to their stable plist keys and stripped from
+        // the assertion input; the naive key would have matched neither.
+        XCTAssertNil(
+            backendAssignment[cpuItem.uniqueIdentifier],
+            "Plist-handled item must be stripped from the assertion input via its resolved key"
+        )
+        XCTAssertNil(
+            backendAssignment[memItem.uniqueIdentifier],
+            "Plist-handled item must be stripped from the assertion input via its resolved key"
+        )
     }
 
     func testRefresh_NoOpsWithoutAttachedAppState() {

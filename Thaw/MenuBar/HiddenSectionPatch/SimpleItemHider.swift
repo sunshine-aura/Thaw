@@ -1264,14 +1264,11 @@ final class SimpleItemHider: ObservableObject {
                 snapshots[identifier]
             else { continue }
 
-            guard let key = TrailingItemPositionStore.resolvedPositionKey(
-                for: item,
-                existingKeys: existingKeys
-            ) ?? TrailingItemPositionStore.resolvePositionalKey(
+            guard let key = TrailingItemPreferredPositionsKeys.resolveKey(
                 for: item,
                 existingKeys: existingKeys,
                 positions: positions,
-                allItems: allItems
+                liveItems: allItems
             ) else { continue }
 
             let currentWeight = positions[key] ?? overflowBase
@@ -1429,7 +1426,9 @@ final class SimpleItemHider: ObservableObject {
         for item in allItems where Self.isCGSWindowHideable(item) {
             let section = effectiveAssignment[item.uniqueIdentifier] ?? .visible
             guard section != .visible else { continue }
-            if plistHandledKeys.contains(resolvedPlistKey(for: item)) { continue }
+            if plistHandledKeys.contains(resolvedPlistKey(for: item)) {
+                continue
+            }
             let pid = item.sourcePID ?? item.ownerPID
             if #available(macOS 27, *) {
                 guard item.sourcePID != nil else { continue }

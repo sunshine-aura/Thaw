@@ -100,25 +100,20 @@ final class TrailingItemPositionStore {
         // resolve via the same positional heuristic MenuBarAgentPositionStore
         // uses — otherwise we create a new ghost key on every tick that
         // accumulates indefinitely and scrambles the ordering.
+        // Resolve each live item to its key, trying the title-based tiers first
+        // and falling back to the positional heuristic for dynamic-title apps
+        // (iStat Menus), whose naive `status:<namespace>::<title>` key uses the
+        // AX title that changes every second — otherwise we create a new ghost
+        // key on every tick that accumulates indefinitely and scrambles order.
         var liveResolvedKeys = Set<String>()
         for item in allItems {
-            if let resolved = Self.resolvedPositionKey(
+            if let resolved = Self.resolveKey(
                 for: item,
-                existingKeys: existingKeys
+                existingKeys: existingKeys,
+                positions: positions,
+                liveItems: allItems
             ) {
                 liveResolvedKeys.insert(resolved)
-            } else {
-                // Title-based resolution failed (dynamic-title item like iStat).
-                // Fall back to the positional heuristic: match items to keys
-                // by their left-to-right order within the owning app's family.
-                if let positional = Self.resolvePositionalKey(
-                    for: item,
-                    existingKeys: existingKeys,
-                    positions: positions,
-                    allItems: allItems
-                ) {
-                    liveResolvedKeys.insert(positional)
-                }
             }
         }
 
@@ -195,14 +190,11 @@ final class TrailingItemPositionStore {
                 continue
             }
 
-            guard let plistKey = Self.resolvedPositionKey(
-                for: item,
-                existingKeys: existingKeys
-            ) ?? Self.resolvePositionalKey(
+            guard let plistKey = Self.resolveKey(
                 for: item,
                 existingKeys: existingKeys,
                 positions: positions,
-                allItems: items
+                liveItems: items
             )
             else {
                 Self.diagLog.debug("hideItems: no plist key for \(item.uniqueIdentifier)")
@@ -241,14 +233,11 @@ final class TrailingItemPositionStore {
         var restored = Set<String>()
 
         for item in items {
-            guard let plistKey = Self.resolvedPositionKey(
-                for: item,
-                existingKeys: existingKeys
-            ) ?? Self.resolvePositionalKey(
+            guard let plistKey = Self.resolveKey(
                 for: item,
                 existingKeys: existingKeys,
                 positions: positions,
-                allItems: allItems
+                liveItems: allItems
             )
             else { continue }
 
@@ -319,16 +308,26 @@ final class TrailingItemPositionStore {
         var leftWeight: Int?
         var rightWeight: Int?
         for neighbor in visible[..<itemIndex].reversed() {
-            if let key = Self.resolvedPositionKey(for: neighbor, existingKeys: existingKeys),
-               let weight = positions[key]
+            if let key = Self.resolveKey(
+                for: neighbor,
+                existingKeys: existingKeys,
+                positions: positions,
+                liveItems: allItems
+            ),
+                let weight = positions[key]
             {
                 leftWeight = weight
                 break
             }
         }
         for neighbor in visible[(itemIndex + 1)...] {
-            if let key = Self.resolvedPositionKey(for: neighbor, existingKeys: existingKeys),
-               let weight = positions[key]
+            if let key = Self.resolveKey(
+                for: neighbor,
+                existingKeys: existingKeys,
+                positions: positions,
+                liveItems: allItems
+            ),
+                let weight = positions[key]
             {
                 rightWeight = weight
                 break
@@ -390,6 +389,28 @@ final class TrailingItemPositionStore {
             existingKeys: existingKeys,
             positions: positions,
             liveItems: allItems
+        )
+    }
+
+    /// Resolves a live item to its existing key, trying the title-based tiers
+    /// first and falling back to the positional heuristic for dynamic-title
+    /// apps. The single entry point that replaces the two-step
+    /// ``resolvedPositionKey`` `??` ``resolvePositionalKey`` dance. Delegates to
+    /// the shared
+    /// ``TrailingItemPreferredPositionsKeys/resolveKey(for:existingKeys:positions:liveItems:)``;
+    /// `positions` and `liveItems` are only consulted by the positional
+    /// fallback, so omit them to use the title-only tiers (e.g. from tests).
+    static func resolveKey(
+        for item: MenuBarItem,
+        existingKeys: [String],
+        positions: [String: Int] = [:],
+        liveItems: [MenuBarItem] = []
+    ) -> String? {
+        TrailingItemPreferredPositionsKeys.resolveKey(
+            for: item,
+            existingKeys: existingKeys,
+            positions: positions,
+            liveItems: liveItems
         )
     }
 
