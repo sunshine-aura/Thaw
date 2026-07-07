@@ -356,113 +356,41 @@ final class TrailingItemPositionStore {
         return !aPrefix.isEmpty && aPrefix == bPrefix
     }
 
-    /// Builds the `TrailingItemPreferredPositions` key for a menu-bar item.
-    /// Format: `status:{bundleID}::{title}`
+    /// Builds the naive `TrailingItemPreferredPositions` key for a menu-bar item
+    /// (`status:{bundleID}::{title}`). Delegates to the shared
+    /// ``TrailingItemPreferredPositionsKeys/naiveKey(for:)``.
     static func key(for item: MenuBarItem) -> String {
-        "status:\(item.tag.namespace)::\(item.tag.title)"
+        TrailingItemPreferredPositionsKeys.naiveKey(for: item)
     }
 
-    /// Resolves a live item to its existing key in the
-    /// `TrailingItemPreferredPositions` dictionary.
-    ///
-    /// Three key shapes appear in the dictionary (documented in
-    /// ``MenuBarAgentPositionStore/resolveKey(for:existingKeys:positions:liveItems:)``):
-    ///   * `module:<title>` — Apple Control Center modules
-    ///   * `status:<bundleID>::<itemID>` — third-party items
-    ///   * `status:<AppDisplayName>::<itemID>` — display-name form
-    ///
-    /// For apps like iStat Menus that rewrite their AX title every second,
-    /// none of the title-based tiers match. In that case we fall back to the
-    /// positional heuristic: match the item by its sibling order within the
-    /// owning app's key family.
+    /// Resolves a live item to its existing key via the title-based tiers only.
+    /// Delegates to the shared
+    /// ``TrailingItemPreferredPositionsKeys/titleTierKey(for:existingKeys:)``;
+    /// returns nil when the item uses a stable internal identifier (e.g. iStat
+    /// Menus) so the caller can fall back to ``resolvePositionalKey``.
     static func resolvedPositionKey(
         for item: MenuBarItem,
         existingKeys: [String]
     ) -> String? {
-        let title = item.tag.title
-        guard !title.isEmpty else { return nil }
-
-        // 1. Apple module (`module:Clock`, `module:WiFi`, etc.).
-        if item.tag.namespace.isMenuBarHostingNamespace {
-            let moduleKey = "module:\(title)"
-            if existingKeys.contains(moduleKey) {
-                return moduleKey
-            }
-        }
-
-        // 2. Exact bundle-ID form: `status:<namespace>::<title>`.
-        let naiveKey = key(for: item)
-        if existingKeys.contains(naiveKey) {
-            return naiveKey
-        }
-
-        // 3. Display-name form: suffix-match `::<title>`.
-        let suffix = "::\(title)"
-        let candidates = existingKeys.filter { $0.hasPrefix("status:") && $0.hasSuffix(suffix) }
-        if candidates.count == 1 {
-            return candidates[0]
-        }
-        if candidates.count > 1 {
-            let displayPrefixes = candidateDisplayNamePrefixes(for: item)
-            for key in candidates {
-                let middle = key.dropFirst("status:".count).dropLast(suffix.count)
-                if displayPrefixes.contains(String(middle)) {
-                    return key
-                }
-            }
-        }
-
-        // No title-based match — item uses a stable internal identifier
-        // (e.g. iStat Menus). Without `positions` and `liveItems` (the full
-        // positional fallback) we cannot disambiguate; return nil so the
-        // caller can use the full `MenuBarAgentPositionStore.resolveKey`
-        // when available.
-        return nil
+        TrailingItemPreferredPositionsKeys.titleTierKey(for: item, existingKeys: existingKeys)
     }
 
-    /// Display-name prefixes MenuBarAgent might use for the item's owning app.
-    private static func candidateDisplayNamePrefixes(for item: MenuBarItem) -> Set<String> {
-        var names = Set<String>()
-        if let localized = item.sourceApplication?.localizedName {
-            names.insert(localized)
-        }
-        names.insert(item.displayName)
-        return names
-    }
-
-    /// Resolves a live item to its key in the dictionary by matching its
-    /// left-to-right position within the owning app's family of items against
-    /// the same app's family of keys (ordered by weight).
-    ///
-    /// This is the last-resort fallback for apps like iStat Menus that register
-    /// under a stable internal identifier that never appears in the live AX
-    /// title. Requires the family sizes to match exactly so we can pair
-    /// siblings without guessing.
+    /// Resolves a live item to its key by matching its sibling order within the
+    /// owning app's family against the same app's family of keys. Delegates to
+    /// the shared, axis-aware
+    /// ``TrailingItemPreferredPositionsKeys/resolvePositionalKey(for:existingKeys:positions:liveItems:)``.
     static func resolvePositionalKey(
         for item: MenuBarItem,
         existingKeys: [String],
         positions: [String: Int],
         allItems: [MenuBarItem]
     ) -> String? {
-        let family = allItems
-            .filter { !$0.isSystemClone && $0.tag.namespace == item.tag.namespace }
-            .sorted { $0.bounds.minX < $1.bounds.minX }
-        guard
-            family.count > 1,
-            let itemIndex = family.firstIndex(where: { $0.tag.matchesIgnoringWindowID(item.tag) })
-        else {
-            return nil
-        }
-
-        var familyKeys = existingKeys.filter { $0.hasPrefix("status:\(item.tag.namespace.description)::") }
-        if familyKeys.count != family.count {
-            let displayPrefixes = candidateDisplayNamePrefixes(for: item).map { "status:\($0)::" }
-            familyKeys = existingKeys.filter { key in displayPrefixes.contains { key.hasPrefix($0) } }
-        }
-        guard familyKeys.count == family.count else { return nil }
-
-        let orderedKeys = familyKeys.sorted { (positions[$0] ?? 0) < (positions[$1] ?? 0) }
-        return orderedKeys[itemIndex]
+        TrailingItemPreferredPositionsKeys.resolvePositionalKey(
+            for: item,
+            existingKeys: existingKeys,
+            positions: positions,
+            liveItems: allItems
+        )
     }
 
     // MARK: Private
