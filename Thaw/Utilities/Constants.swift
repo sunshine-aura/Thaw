@@ -119,6 +119,17 @@ enum Constants {
         /// bounds before the revealed glyph has finished recompositing.
         static let layoutPrewarmCaptureSettle: Duration = .milliseconds(800)
 
+        /// Interval between polls while waiting for MenuBarAgent to relaunch and
+        /// re-sort after a preferred-position write (batch reorder or single
+        /// move). MenuBarAgent is a managed launch agent that relaunches within
+        /// ~1-2 s, so the wait polls at this cadence rather than guessing a
+        /// fixed delay.
+        static let menuBarAgentResortPollInterval: Duration = .milliseconds(250)
+        /// Maximum polls (≈3 s at ``menuBarAgentResortPollInterval``) to wait for
+        /// MenuBarAgent's re-sort to satisfy the desired layout before the caller
+        /// reads current geometry and moves on.
+        static let menuBarAgentResortMaxPolls = 12
+
         // MARK: Show-on-hover retention
 
         /// Vertical slack, in points, kept below the menu bar bottom edge while

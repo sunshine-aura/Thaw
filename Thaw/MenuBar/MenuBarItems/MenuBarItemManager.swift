@@ -197,7 +197,9 @@ final class MenuBarItemManager: ObservableObject {
 
         let parkedIDs = Set(items.compactMap { item -> CGWindowID? in
             guard item.bounds.width > 0, item.bounds.height > 0 else { return item.windowID }
-            if item.bounds.midY > 80 { return item.windowID }
+            if item.bounds.midY > 80 {
+                return item.windowID
+            }
             guard let barMidY else { return nil }
             return abs(item.bounds.midY - barMidY) > 48 ? item.windowID : nil
         })
@@ -1075,7 +1077,9 @@ final class MenuBarItemManager: ObservableObject {
         if let badgeIndex = arrangedViews.firstIndex(where: { $0.isNewItemsBadge }) {
             let rightNeighbor = arrangedViews[(badgeIndex + 1) ..< arrangedViews.count]
                 .compactMap { view -> MenuBarItem? in
-                    if case let .item(item) = view.kind { return item }
+                    if case let .item(item) = view.kind {
+                        return item
+                    }
                     return nil
                 }
                 .first
@@ -1083,7 +1087,9 @@ final class MenuBarItemManager: ObservableObject {
             let leftNeighbor = arrangedViews[..<badgeIndex]
                 .reversed()
                 .compactMap { view -> MenuBarItem? in
-                    if case let .item(item) = view.kind { return item }
+                    if case let .item(item) = view.kind {
+                        return item
+                    }
                     return nil
                 }
                 .first
@@ -3089,7 +3095,9 @@ extension MenuBarItemManager {
         }
 
         var recoverySuggestion: String? {
-            if case .itemNotMovable = self { return nil }
+            if case .itemNotMovable = self {
+                return nil
+            }
             return "Please try again. If the error persists, please file a bug report."
         }
     }
@@ -3525,7 +3533,9 @@ extension MenuBarItemManager {
                 firstLocation: context.firstLocation
             )
             storeInnerTask(innerTask, in: state.innerTaskHolder)
-            if Task.isCancelled { innerTask.cancel() }
+            if Task.isCancelled {
+                innerTask.cancel()
+            }
         }
     }
 
@@ -3682,7 +3692,9 @@ extension MenuBarItemManager {
         /// Whether the destination is to the right of the anchor, used for
         /// computing offset weights in cursor-free reorder.
         var isRightward: Bool {
-            if case .rightOfItem = self { return true }
+            if case .rightOfItem = self {
+                return true
+            }
             return false
         }
 
@@ -4540,7 +4552,9 @@ extension MenuBarItemManager {
 
             for _ in 0 ..< maximumMoves {
                 guard !Task.isCancelled else { return }
-                if let revealedSection, hider.revealedSection != revealedSection { return }
+                if let revealedSection, hider.revealedSection != revealedSection {
+                    return
+                }
 
                 let sectionItems = liveItems.filter {
                     LayoutPlanner.isEligibleForSectionOrder($0, section: section) &&
@@ -4654,6 +4668,31 @@ extension MenuBarItemManager {
         }
     }
 
+    /// Waits for MenuBarAgent to relaunch and re-read the layout after a
+    /// preferred-position write, returning the latest geometry. MenuBarAgent is a
+    /// managed launch agent that relaunches within ~1-2 s, so both the batch and
+    /// single-move paths poll the live order until it settles rather than
+    /// guessing a fixed delay. Stops as soon as `isSatisfied` holds (converged)
+    /// or the poll budget elapses (current enough for the caller to mop up any
+    /// residual).
+    @available(macOS 27, *)
+    private func waitForMenuBarAgentLayout(
+        maxAttempts: Int = Constants.MenuBarTuning.menuBarAgentResortMaxPolls,
+        interval: Duration = Constants.MenuBarTuning.menuBarAgentResortPollInterval,
+        enumerate: () async -> [MenuBarItem] = { await MenuBarItem.getMenuBarItems(option: .activeSpace) },
+        isSatisfied: ([MenuBarItem]) -> Bool
+    ) async -> [MenuBarItem] {
+        var liveItems = await enumerate()
+        for _ in 0 ..< maxAttempts {
+            try? await Task.sleep(for: interval)
+            liveItems = await enumerate()
+            if isSatisfied(liveItems) {
+                break
+            }
+        }
+        return liveItems
+    }
+
     /// Waits for MenuBarAgent to relaunch and re-sort after a batch
     /// ``MenuBarAgentPositionStore/applyOrder(desiredOrder:liveItems:environment:)``
     /// write, returning the latest geometry. Polls until `section` satisfies
@@ -4666,24 +4705,23 @@ extension MenuBarItemManager {
         section: MenuBarSection.Name,
         hider: SimpleItemHider
     ) async -> [MenuBarItem] {
-        var liveItems = await MenuBarItem.getMenuBarItems(option: .activeSpace)
-        for _ in 0 ..< 12 {
-            try? await Task.sleep(for: .milliseconds(250))
-            liveItems = await MenuBarItem.getMenuBarItems(option: .activeSpace)
-            let sectionItems = liveItems.filter {
+        let experimentalSystemItemHiding = appState?.settings.advanced.enableExperimentalSystemItemHiding ?? false
+        let orderSatisfied: ([MenuBarItem]) -> Bool = { items in
+            let sectionItems = items.filter {
                 LayoutPlanner.isEligibleForSectionOrder($0, section: section) &&
                     hider.section(for: $0) == section
             }
-            if LayoutPlanner.nextAchievableOrderMove(
+            return LayoutPlanner.nextAchievableOrderMove(
                 items: sectionItems,
                 desiredOrder: desiredOrder,
-                experimentalSystemItemHiding: appState?.settings.advanced.enableExperimentalSystemItemHiding ?? false
-            ) == nil {
-                MenuBarItemManager.diagLog.info(
-                    "Batch preferred-position order satisfied for \(section.logString)"
-                )
-                break
-            }
+                experimentalSystemItemHiding: experimentalSystemItemHiding
+            ) == nil
+        }
+        let liveItems = await waitForMenuBarAgentLayout(isSatisfied: orderSatisfied)
+        if orderSatisfied(liveItems) {
+            MenuBarItemManager.diagLog.info(
+                "Batch preferred-position order satisfied for \(section.logString)"
+            )
         }
         return liveItems
     }
@@ -4715,21 +4753,21 @@ extension MenuBarItemManager {
         // MenuBarAgent is SIGTERM'd to re-read the layout and relaunches within
         // ~1-2 s. Poll the live order until it settles rather than guessing a
         // fixed delay.
-        for _ in 0 ..< 12 {
-            try? await Task.sleep(for: .milliseconds(250))
-            let updated = await MenuBarItem.getMenuBarItems(option: .activeSpace)
-            if LayoutPlanner.liveOrderSatisfiesDestination(
-                items: updated,
+        let destinationSatisfied: ([MenuBarItem]) -> Bool = { items in
+            LayoutPlanner.liveOrderSatisfiesDestination(
+                items: items,
                 item: item,
                 destination: destination,
                 experimentalSystemItemHiding: experimentalSystemItemHiding
-            ) {
-                lastMoveOperationTimestamp = .now
-                MenuBarItemManager.diagLog.info(
-                    "Preferred-position move verified for \(item.logString) \(destination.logString)"
-                )
-                return true
-            }
+            )
+        }
+        let updated = await waitForMenuBarAgentLayout(isSatisfied: destinationSatisfied)
+        if destinationSatisfied(updated) {
+            lastMoveOperationTimestamp = .now
+            MenuBarItemManager.diagLog.info(
+                "Preferred-position move verified for \(item.logString) \(destination.logString)"
+            )
+            return true
         }
 
         MenuBarItemManager.diagLog.warning(
@@ -6250,8 +6288,12 @@ extension MenuBarItemManager {
             switch decision {
             case let .move(item, destination):
                 let targetSection: MenuBarSection.Name = {
-                    if case let .section(section) = entry.kind { return section }
-                    if case let .waitForRelaunch(_, section) = entry.kind { return section }
+                    if case let .section(section) = entry.kind {
+                        return section
+                    }
+                    if case let .waitForRelaunch(_, section) = entry.kind {
+                        return section
+                    }
                     return .hidden
                 }()
                 MenuBarItemManager.diagLog.info(
@@ -7564,7 +7606,9 @@ extension MenuBarItemManager {
         // Bail before arming any profile state if cancellation arrived
         // during the settling wait (a newer apply has replaced us via
         // applyProfile's layoutTask?.cancel()).
-        if Task.isCancelled { return }
+        if Task.isCancelled {
+            return
+        }
 
         // MARK: Phase 1: persist state and arm in-flight flags
 
@@ -8015,7 +8059,9 @@ extension MenuBarItemManager {
 
                 let isControlUID = uid == hiddenCtrlUID || uid == ahCtrlUID
                 guard let item = freshItems.first(where: {
-                    if isControlUID { return $0.uniqueIdentifier == uid }
+                    if isControlUID {
+                        return $0.uniqueIdentifier == uid
+                    }
                     return $0.uniqueIdentifier == uid && isProfileItem($0)
                 }) else {
                     MenuBarItemManager.diagLog.debug("Profile layout (full sort): \(uid) not found, skipping")

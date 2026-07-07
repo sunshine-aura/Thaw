@@ -93,4 +93,12 @@ enum MenuBarBackendFactory {
             return LegacyMenuBarBackend()
         }
     }()
+
+    /// Selects the backend implied by a `usesVisibilityRestrictions` flag,
+    /// independent of the host OS. Callers that only carry the boolean (the
+    /// image cache's capture-section resolver and its tests) route through the
+    /// same adapters as ``current`` instead of hand-constructing one.
+    static func backend(usesVisibilityRestrictions: Bool) -> any MenuBarBackend {
+        usesVisibilityRestrictions ? AssertionMenuBarBackend() : LegacyMenuBarBackend()
+    }
 }

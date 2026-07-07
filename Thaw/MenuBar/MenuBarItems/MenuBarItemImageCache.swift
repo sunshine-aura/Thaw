@@ -45,7 +45,9 @@ final class MenuBarItemImageCache: ObservableObject, @unchecked Sendable {
         /// dimension and pixel-data comparison when instances differ.
         static func isVisuallyEqual(_ old: CapturedImage?, _ new: CapturedImage?) -> Bool {
             guard let old, let new else { return old == nil && new == nil }
-            if old.cgImage === new.cgImage { return true }
+            if old.cgImage === new.cgImage {
+                return true
+            }
             guard old.scale == new.scale,
                   old.cgImage.width == new.cgImage.width,
                   old.cgImage.height == new.cgImage.height
@@ -456,8 +458,12 @@ final class MenuBarItemImageCache: ObservableObject, @unchecked Sendable {
             let isOnScreen: Bool
 
             static func < (lhs: Entry, rhs: Entry) -> Bool {
-                if lhs.section != rhs.section { return lhs.section < rhs.section }
-                if lhs.identifier != rhs.identifier { return lhs.identifier < rhs.identifier }
+                if lhs.section != rhs.section {
+                    return lhs.section < rhs.section
+                }
+                if lhs.identifier != rhs.identifier {
+                    return lhs.identifier < rhs.identifier
+                }
                 return lhs.windowID < rhs.windowID
             }
         }
@@ -1164,7 +1170,9 @@ final class MenuBarItemImageCache: ObservableObject, @unchecked Sendable {
                 // is in AppKit coords (Y-up) — but both share the same X axis and
                 // ranges overlap for on-screen items, so intersects() works as a
                 // coarse off-screen filter (negative-X hidden items are excluded).
-                if let screenFrame, !screenFrame.intersects(bounds) { continue }
+                if let screenFrame, !screenFrame.intersects(bounds) {
+                    continue
+                }
                 axItems.append((item: item, bounds: bounds))
             }
 
@@ -1679,13 +1687,12 @@ final class MenuBarItemImageCache: ObservableObject, @unchecked Sendable {
         usesVisibilityRestrictions: Bool,
         revealedSection: MenuBarSection.Name?
     ) -> [MenuBarSection.Name] {
-        let backend: any MenuBarBackend = usesVisibilityRestrictions
-            ? AssertionMenuBarBackend()
-            : LegacyMenuBarBackend()
-        return backend.capturableSections(
-            from: requestedSections,
-            revealedSection: revealedSection
-        )
+        return MenuBarBackendFactory
+            .backend(usesVisibilityRestrictions: usesVisibilityRestrictions)
+            .capturableSections(
+                from: requestedSections,
+                revealedSection: revealedSection
+            )
     }
 
     /// Updates the cache for the given sections, without checking whether
