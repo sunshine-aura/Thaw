@@ -72,14 +72,10 @@ struct DesiredLayout: Equatable {
         return result
     }
 
-    /// Maps a persisted key string to its enum value.
+    /// Maps a persisted key string to its enum value. The persisted key is the
+    /// enum's raw value, so this is `MenuBarSection.Name`'s own `init?(rawValue:)`.
     private static func sectionName(forPersistedKey key: String) -> MenuBarSection.Name? {
-        switch key {
-        case "visible": .visible
-        case "hidden": .hidden
-        case "alwaysHidden": .alwaysHidden
-        default: nil
-        }
+        MenuBarSection.Name(rawValue: key)
     }
 }
 
@@ -181,17 +177,14 @@ enum LayoutReconciler {
         for section: MenuBarSection.Name,
         controlItems: MenuBarItemManager.ControlItemPair
     ) -> MenuBarItemManager.MoveDestination {
-        switch section {
-        case .visible:
-            return .rightOfItem(controlItems.hidden)
-        case .hidden:
-            return .leftOfItem(controlItems.hidden)
-        case .alwaysHidden:
-            if let alwaysHidden = controlItems.alwaysHidden {
-                return .leftOfItem(alwaysHidden)
-            }
-            return .leftOfItem(controlItems.hidden)
-        }
+        // .fallbackToHidden guarantees a non-nil result for every section, so
+        // the coalescing default is unreachable — it only keeps the signature
+        // non-optional without a force-unwrap.
+        LayoutPlanner.sectionBoundaryDestination(
+            for: section,
+            controlItems: controlItems,
+            missingAlwaysHidden: .fallbackToHidden
+        ) ?? .leftOfItem(controlItems.hidden)
     }
 
     /// Decides where each unmanaged item should land during a profile

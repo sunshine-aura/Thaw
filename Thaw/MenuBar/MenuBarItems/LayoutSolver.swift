@@ -619,11 +619,7 @@ enum LayoutSolver {
 
             // Fallback to section boundary.
             if destination == nil {
-                let targetSection: MenuBarSection.Name = switch targetKey {
-                case "hidden": .hidden
-                case "alwaysHidden": .alwaysHidden
-                default: .visible
-                }
+                let targetSection = MenuBarSection.Name(rawValue: targetKey) ?? .visible
                 destination = .sectionBoundary(targetSection)
             }
 
@@ -962,23 +958,16 @@ enum LayoutSolver {
         id.split(separator: ":", maxSplits: 2).prefix(2).joined(separator: ":")
     }
 
-    /// Maps a persisted section key string to its enum value.
+    /// Maps a persisted section key string to its enum value. The persisted key
+    /// is the enum's raw value, so this is `MenuBarSection.Name`'s own
+    /// `init?(rawValue:)`.
     private static nonisolated func sectionName(forPersistedKey key: String) -> MenuBarSection.Name? {
-        switch key {
-        case "visible": .visible
-        case "hidden": .hidden
-        case "alwaysHidden": .alwaysHidden
-        default: nil
-        }
+        MenuBarSection.Name(rawValue: key)
     }
 
-    /// Maps a section to its persisted key string.
+    /// Maps a section to its persisted key string (its raw value).
     private static nonisolated func sectionKeyFor(_ section: MenuBarSection.Name) -> String {
-        switch section {
-        case .visible: return "visible"
-        case .hidden: return "hidden"
-        case .alwaysHidden: return "alwaysHidden"
-        }
+        section.rawValue
     }
 
     // MARK: - State flag gates

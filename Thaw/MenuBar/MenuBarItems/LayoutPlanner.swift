@@ -309,15 +309,46 @@ enum LayoutPlanner {
         }
     }
 
+    /// What to do when the always-hidden section is targeted but its control
+    /// item divider is absent (the always-hidden section is disabled).
+    enum MissingAlwaysHiddenDividerPolicy {
+        /// Fall back to the hidden control item — the reconcile path, which
+        /// must always produce a destination.
+        case fallbackToHidden
+        /// Yield nil so the caller skips the move — the plan path, which treats
+        /// an absent divider as "no achievable boundary".
+        case skip
+    }
+
+    /// The move destination that places an item at the leading boundary of
+    /// `section`. Each section's items live to one side of that section's own
+    /// control item, so the control item is the natural insertion point.
+    static func sectionBoundaryDestination(
+        for section: MenuBarSection.Name,
+        controlItems: ControlItemPair,
+        missingAlwaysHidden: MissingAlwaysHiddenDividerPolicy
+    ) -> MoveDestination? {
+        switch section {
+        case .visible:
+            return .rightOfItem(controlItems.hidden)
+        case .hidden:
+            return .leftOfItem(controlItems.hidden)
+        case .alwaysHidden:
+            if let alwaysHidden = controlItems.alwaysHidden {
+                return .leftOfItem(alwaysHidden)
+            }
+            switch missingAlwaysHidden {
+            case .fallbackToHidden: return .leftOfItem(controlItems.hidden)
+            case .skip: return nil
+            }
+        }
+    }
+
     static func sectionBoundaryDestination(
         for section: MenuBarSection.Name,
         controlItems: ControlItemPair
     ) -> MoveDestination? {
-        switch section {
-        case .visible: .rightOfItem(controlItems.hidden)
-        case .hidden: .leftOfItem(controlItems.hidden)
-        case .alwaysHidden: controlItems.alwaysHidden.map(MoveDestination.leftOfItem)
-        }
+        sectionBoundaryDestination(for: section, controlItems: controlItems, missingAlwaysHidden: .skip)
     }
 
     static func dividerMoveDestination(

@@ -915,23 +915,16 @@ final class MenuBarItemManager: ObservableObject {
         MenuBarItemManager.diagLog.debug("Saved section order: \(newOrder.mapValues(\.count))")
     }
 
-    /// Returns a persistable string key for the given section name.
+    /// Returns a persistable string key for the given section name (its raw
+    /// value).
     private func sectionKey(for section: MenuBarSection.Name) -> String {
-        switch section {
-        case .visible: "visible"
-        case .hidden: "hidden"
-        case .alwaysHidden: "alwaysHidden"
-        }
+        section.rawValue
     }
 
-    /// Returns the section name for the given persisted key, if valid.
+    /// Returns the section name for the given persisted key, if valid. The
+    /// persisted key is the enum's raw value.
     private func sectionName(for key: String) -> MenuBarSection.Name? {
-        switch key {
-        case "visible": .visible
-        case "hidden": .hidden
-        case "alwaysHidden": .alwaysHidden
-        default: nil
-        }
+        MenuBarSection.Name(rawValue: key)
     }
 
     /// Prefix used in `pendingRelocations` values to mark items whose rehide
