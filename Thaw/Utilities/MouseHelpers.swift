@@ -130,7 +130,23 @@ enum MouseHelpers {
     static func warpCursor(to point: CGPoint) {
         let result = CGWarpMouseCursorPosition(point)
         if result != .success {
-            diagLog.error("CGWarpMouseCursorPosition failed with error code \(result.rawValue)")
+            // Posting a mouseMoved event is more reliable than `warp` when a
+            // menu is tracking the cursor: the event updates the cursor
+            // position in the Window Server even if warp is blocked.
+            diagLog.warning("CGWarpMouseCursorPosition failed (error: \(result.rawValue)), falling back to CGEvent mouseMoved")
+            guard
+                let source = CGEventSource(stateID: .hidSystemState),
+                let event = CGEvent(
+                    mouseEventSource: source,
+                    mouseType: .mouseMoved,
+                    mouseCursorPosition: point,
+                    mouseButton: .left
+                )
+            else {
+                diagLog.error("Failed to create fallback mouseMoved event")
+                return
+            }
+            event.post(tap: .cghidEventTap)
         }
     }
 

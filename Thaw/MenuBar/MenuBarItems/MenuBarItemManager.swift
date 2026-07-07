@@ -1831,6 +1831,13 @@ extension MenuBarItemManager {
         MenuBarItemManager.diagLog.debug("Move operation timeout: \(timeout)")
 
         lastMoveOperationTimestamp = .now
+        // Warp the cursor to the drag start point before hiding it so the
+        // Window Server's hot-corner/anchor logic does not see a cursor
+        // stranded in the previous location. Without this, macOS 15 routes
+        // events through the hot corner at the cursor's old position, which
+        // manifests as the Thaw icon shaking and the cursor appearing to
+        // jump toward the top-left.
+        MouseHelpers.warpCursor(to: targetPoints.start)
         MouseHelpers.hideCursor()
         defer {
             if let mouseLocation {
@@ -2115,6 +2122,18 @@ extension MenuBarItemManager {
             throw EventError.eventCreationFailure(item)
         }
 
+        // Warp the cursor to the click point so the Window Server's hit-test
+        // matches the event coordinates rather than the cursor's current
+        // position. Without this warp the Window Server can route the click
+        // via the cursor's old location (Apple menu / hot corner), producing
+        // the symptom of the Thaw icon bouncing and the cursor drifting
+        // toward the top-left on macOS 15.
+        MouseHelpers.warpCursor(to: clickPoint)
+        // Small delay so the Window Server processes the warp before the
+        // event is posted. Without this the event is still routed using the
+        // pre-warp cursor position.
+        try? await Task.sleep(for: .milliseconds(10))
+
         MouseHelpers.hideCursor()
         defer {
             MouseHelpers.warpCursor(to: mouseLocation)
@@ -2372,9 +2391,30 @@ extension MenuBarItemManager {
     /// change internally. If we click the item before it has settled, the
     /// app may position its popup at the old location.
     ///
-    /// This method polls the item's bounds until two consecutive reads
-    /// return the same value, up to a maximum wait time.
-    private nonisolated func waitForItemPositionToSettle(item: MenuBarItem) async {
+    /// Two-phase wait to be reliable under CPU load on macOS 15:
+    /// 1. `previousOrigin` phase: poll until the Window Server reports the
+    ///    item at a different origin than `previousOrigin`, up to 150 ms.
+    ///    This guards against the move reporting success while the window
+    ///    has not actually started moving yet.
+    /// 2. settle phase: poll until two consecutive reads return the same
+    ///    bounds, up to 250 ms.
+    private nonisolated func waitForItemPositionToSettle(
+        item: MenuBarItem,
+        previousOrigin: CGPoint? = nil
+    ) async {
+        // Phase 1: wait for the item's origin to change from `previousOrigin`.
+        if let previousOrigin {
+            let phase1Deadline = ContinuousClock.now + .milliseconds(150)
+            while ContinuousClock.now < phase1Deadline {
+                await eventSleep(for: .milliseconds(15))
+                let currentOrigin = Bridging.getWindowBounds(for: item.windowID)?.origin
+                if currentOrigin != previousOrigin, currentOrigin != nil {
+                    break
+                }
+            }
+        }
+
+        // Phase 2: settle once the item is no longer moving.
         let maxWait: Duration = .milliseconds(250)
         let pollInterval: Duration = .milliseconds(20)
         let startTime = ContinuousClock.now
@@ -2521,6 +2561,12 @@ extension MenuBarItemManager {
 
         MenuBarItemManager.diagLog.debug("Temporarily showing \(item.logString) on display \(resolvedDisplayID)")
 
+        // Capture the item's origin before the move so the settle phase can
+        // detect when the Window Server has applied the new position even if
+        // `move()` reports success before the item has actually started moving
+        // (visible as the Thaw icon bouncing on macOS 15 under CPU load).
+        let preMoveOrigin = Bridging.getWindowBounds(for: item.windowID)?.origin
+
         do {
             try await move(item: item, to: moveDestination, on: resolvedDisplayID, skipInputPause: true)
         } catch {
@@ -2550,7 +2596,7 @@ extension MenuBarItemManager {
         // Wait for the item's position to stabilize after the move. Some
         // apps need time to process the window relocation before they can
         // correctly position their popup in response to a click.
-        await waitForItemPositionToSettle(item: item)
+        await waitForItemPositionToSettle(item: item, previousOrigin: preMoveOrigin)
 
         // Re-fetch the item from the live window list specifically for this display.
         // Prefer an exact windowID match, then fall back to namespace+title with PID matching.
