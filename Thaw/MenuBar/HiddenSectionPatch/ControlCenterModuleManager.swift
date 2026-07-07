@@ -252,10 +252,6 @@ final class ControlCenterModuleManager {
     /// the preference. Control Center is a managed launch agent and restarts
     /// itself automatically within ~1-2s.
     private static func restartControlCenter() {
-        for app in NSWorkspace.shared.runningApplications
-            where app.bundleIdentifier == controlCenterBundleID
-        {
-            kill(app.processIdentifier, SIGTERM)
-        }
+        ManagedAgentRestarter.restart(bundleID: controlCenterBundleID)
     }
 }

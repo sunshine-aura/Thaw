@@ -17,6 +17,26 @@ final class MenuBarAgentPositionStoreTests: XCTestCase {
     // store delegates to). This suite covers only the store's own
     // orchestration: neighborItems, move, and applyOrder.
 
+    func testManagedAgentRestarterUsesCustomSignalForMenuBarAgentProcess() {
+        let applications = [
+            ManagedAgentRestarter.RunningApplication(bundleIdentifier: "com.apple.MenuBarAgent", processIdentifier: 20),
+            ManagedAgentRestarter.RunningApplication(bundleIdentifier: "com.example.other", processIdentifier: 21),
+        ]
+        var sentSignals: [(pid_t, Int32)] = []
+
+        ManagedAgentRestarter.restart(
+            bundleID: "com.apple.MenuBarAgent",
+            signal: SIGKILL,
+            runningApplications: applications
+        ) { pid, signal in
+            sentSignals.append((pid, signal))
+            return 0
+        }
+
+        XCTAssertEqual(sentSignals.map(\.0), [20])
+        XCTAssertEqual(sentSignals.map(\.1), [SIGKILL])
+    }
+
     // MARK: - neighborItems
 
     func testRightOfItemBracketsAnchorAndRightNeighbor() {

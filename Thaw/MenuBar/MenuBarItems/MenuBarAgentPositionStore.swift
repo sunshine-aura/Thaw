@@ -390,10 +390,6 @@ enum MenuBarAgentPositionStore {
     /// writes every target weight from one snapshot, then nudges once) is where
     /// a multi-item reorder collapses to a single restart.
     private static func nudgeAgent() {
-        for app in NSWorkspace.shared.runningApplications
-            where app.bundleIdentifier == agentBundleID
-        {
-            kill(app.processIdentifier, SIGTERM)
-        }
+        ManagedAgentRestarter.restart(bundleID: agentBundleID)
     }
 }

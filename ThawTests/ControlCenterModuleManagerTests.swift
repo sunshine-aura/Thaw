@@ -21,6 +21,28 @@ final class ControlCenterModuleManagerTests: XCTestCase {
     private static let bluetoothTitle = "com.apple.menuextra.bluetooth"
     private static let bluetoothKey = "Bluetooth"
 
+    func testManagedAgentRestarterSignalsOnlyMatchingControlCenterProcesses() {
+        let applications = [
+            ManagedAgentRestarter.RunningApplication(bundleIdentifier: "com.apple.controlcenter", processIdentifier: 10),
+            ManagedAgentRestarter.RunningApplication(bundleIdentifier: "com.example.other", processIdentifier: 11),
+            ManagedAgentRestarter.RunningApplication(bundleIdentifier: nil, processIdentifier: 12),
+            ManagedAgentRestarter.RunningApplication(bundleIdentifier: "com.apple.controlcenter", processIdentifier: 13),
+        ]
+        var sentSignals: [(pid_t, Int32)] = []
+
+        ManagedAgentRestarter.restart(
+            bundleID: "com.apple.controlcenter",
+            signal: SIGTERM,
+            runningApplications: applications
+        ) { pid, signal in
+            sentSignals.append((pid, signal))
+            return 0
+        }
+
+        XCTAssertEqual(sentSignals.map(\.0), [10, 13])
+        XCTAssertEqual(sentSignals.map(\.1), [SIGTERM, SIGTERM])
+    }
+
     // MARK: governableMenuExtraTitle(forItemIdentifier:)
 
     func testGovernableTitleFromMenuBarAgentIdentifier() {
