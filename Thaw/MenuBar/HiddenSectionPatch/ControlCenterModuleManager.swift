@@ -80,21 +80,15 @@ final class ControlCenterModuleManager {
     }
 
     /// Maps a MenuBarAgent extra's AX title to its Control Center per-host
-    /// preference key.
+    /// preference key, sourced from ``SystemMenuBarModuleCatalog``.
     ///
     /// AirDrop / NowPlaying / UserSwitcher / Bluetooth / WiFi are confirmed keys
     /// present in the live `com.apple.controlcenter` per-host domain. Focus has
     /// no key until the module is customized; `FocusModes` is the conventional
     /// name and is written speculatively (a wrong key is an inert no-op, never
     /// harmful).
-    static nonisolated let moduleKeysByMenuExtraTitle: [String: String] = [
-        "com.apple.menuextra.airdrop": "AirDrop",
-        "com.apple.menuextra.bluetooth": "Bluetooth",
-        "com.apple.menuextra.wifi": "WiFi",
-        "com.apple.menuextra.now-playing": "NowPlaying",
-        "com.apple.menuextra.user": "UserSwitcher",
-        "com.apple.menuextra.focusmode": "FocusModes",
-    ]
+    static nonisolated let moduleKeysByMenuExtraTitle: [String: String] =
+        SystemMenuBarModuleCatalog.controlCenterKeysByMenuExtraTitle
 
     /// The per-host preference value that shows a module in the menu bar.
     static nonisolated let shownValue = 2

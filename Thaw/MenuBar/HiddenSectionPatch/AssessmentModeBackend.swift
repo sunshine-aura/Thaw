@@ -70,32 +70,12 @@ final class AssessmentModeBackend: ObservableObject {
         .sorted()
         .map { NSNumber(value: $0) }
 
-    /// Known `MBSystemItemIdentifier` raw values. Apple does not publish this
-    /// enum; these values are intentionally best-effort and guarded by the
-    /// experimental setting that opts into hiding system items.
+    /// Known `MBSystemItemIdentifier` raw values, sourced from
+    /// ``SystemMenuBarModuleCatalog``. Apple does not publish this enum; these
+    /// values are intentionally best-effort and guarded by the experimental
+    /// setting that opts into hiding system items.
     static func systemItemIdentifier(for tag: MenuBarItemTag) -> Int? {
-        switch tag.title {
-        case "Battery":
-            return 0
-        case "Bluetooth", "com.apple.menuextra.bluetooth":
-            return 1
-        case "Clock", "com.apple.menuextra.clock":
-            return 2
-        case "Displays", "Display", "com.apple.menuextra.displays":
-            return 3
-        case "Keyboard", "com.apple.menuextra.keyboard":
-            return 4
-        case "Sound", "Volume", "com.apple.menuextra.volume":
-            return 5
-        case "WiFi", "Wi-Fi", "com.apple.menuextra.wifi":
-            return 6
-        case "ScreenMirroring", "Screen Mirroring", "com.apple.menuextra.screenmirroring":
-            return 7
-        case "BentoBox-0", "ControlCenter", "com.apple.menuextra.controlcenter":
-            return 8
-        default:
-            return nil
-        }
+        SystemMenuBarModuleCatalog.assessmentSystemItemID(forTitle: tag.title)
     }
 
     private let diagLog = DiagLog(category: "AssessmentModeBackend")
