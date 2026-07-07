@@ -196,6 +196,16 @@ final class MenuBarBackendTests: XCTestCase {
         )
     }
 
+    // MARK: - persistLayoutSnapshot
+
+    func testPersistLayoutSnapshotActionPerBackend() {
+        XCTAssertEqual(legacy.persistLayoutSnapshot(shouldPersist: true), .saveSpatialOrder)
+        XCTAssertEqual(assertion.persistLayoutSnapshot(shouldPersist: true), .mirrorSectionOrder)
+        // Gate closed → neither backend persists.
+        XCTAssertEqual(legacy.persistLayoutSnapshot(shouldPersist: false), .none)
+        XCTAssertEqual(assertion.persistLayoutSnapshot(shouldPersist: false), .none)
+    }
+
     func testLegacyExcludesParkedOffBandItems() {
         let controlItems = legacyControlPair()
         // Parked off the bar band (midY well above 80) → excluded from the check

@@ -2304,11 +2304,15 @@ extension MenuBarItemManager {
             temporarilyShownItemContextsIsEmpty: temporarilyShownItemContexts.isEmpty
         )
 
-        // macOS 27 persists section membership through SimpleItemHider, not the
-        // position-derived savedSectionOrder. Mirror the curated section order
-        // from itemCache so profiles, defaults, and applySavedLayout stay in
-        // sync with the layout bars without fighting the assignment model.
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding, shouldPersistLayoutSnapshot {
+        switch MenuBarBackendFactory.current.persistLayoutSnapshot(shouldPersist: shouldPersistLayoutSnapshot) {
+        case .none:
+            break
+        case .mirrorSectionOrder:
+            // macOS 27 persists section membership through SimpleItemHider, not
+            // the position-derived savedSectionOrder. Mirror the curated section
+            // order from itemCache so profiles, defaults, and applySavedLayout
+            // stay in sync with the layout bars without fighting the assignment
+            // model.
             let mirrored = computeSectionOrder(from: context.cache)
             if mirrored != savedSectionOrder {
                 savedSectionOrder = mirrored
@@ -2317,9 +2321,7 @@ extension MenuBarItemManager {
                     "Mirrored macOS 27 section order: \(mirrored.mapValues(\.count))"
                 )
             }
-        }
-
-        if MenuBarBackendFactory.current.supportsLegacySectionHiding, shouldPersistLayoutSnapshot {
+        case .saveSpatialOrder:
             // Don't persist if any items are in a transient blocked state (x=-1).
             // Wait for the next cache cycle when bounds are reliable.
             let hasBlockedItems = MenuBarSection.Name.allCases.contains { section in

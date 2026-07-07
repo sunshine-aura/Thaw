@@ -1,0 +1,22 @@
+//
+//  MenuBarBackendTypes.swift
+//  Project: Thaw
+//
+//  Copyright (Ice) © 2023–2025 Jordan Baird
+//  Copyright (Thaw) © 2026 Toni Förster
+//  Licensed under the GNU GPLv3
+
+/// The layout-snapshot persistence a backend wants the manager to perform when
+/// the shared "should persist now" gate is open. The manager owns the actual
+/// I/O (and the live blocked-items / cross-display guards); the backend only
+/// decides which policy applies.
+enum LayoutSnapshotAction: Equatable {
+    /// Persist nothing this cycle.
+    case none
+    /// macOS 27: mirror the curated section order out of `itemCache` into
+    /// `savedSectionOrder` (membership is owned by `SimpleItemHider`).
+    case mirrorSectionOrder
+    /// Legacy: derive and save the section order from item positions, subject to
+    /// the manager's blocked-item (`x == -1`) and cross-display guards.
+    case saveSpatialOrder
+}

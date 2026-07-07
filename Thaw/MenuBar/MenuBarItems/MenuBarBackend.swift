@@ -76,6 +76,11 @@ protocol MenuBarBackend: Sendable {
         controlItems: MenuBarItemManager.ControlItemPair,
         hider: SimpleItemHider?
     ) -> Bool
+
+    /// Which layout-snapshot persistence to run when the shared persist gate is
+    /// open (`shouldPersist`). Legacy saves the position-derived spatial order;
+    /// the assertion backend mirrors the assignment-driven section order.
+    nonisolated func persistLayoutSnapshot(shouldPersist: Bool) -> LayoutSnapshotAction
 }
 
 struct LegacyMenuBarBackend: MenuBarBackend {
@@ -183,6 +188,10 @@ struct LegacyMenuBarBackend: MenuBarBackend {
         }
         return false
     }
+
+    nonisolated func persistLayoutSnapshot(shouldPersist: Bool) -> LayoutSnapshotAction {
+        shouldPersist ? .saveSpatialOrder : .none
+    }
 }
 
 struct AssertionMenuBarBackend: MenuBarBackend {
@@ -287,6 +296,10 @@ struct AssertionMenuBarBackend: MenuBarBackend {
             }
         }
         return false
+    }
+
+    nonisolated func persistLayoutSnapshot(shouldPersist: Bool) -> LayoutSnapshotAction {
+        shouldPersist ? .mirrorSectionOrder : .none
     }
 }
 
