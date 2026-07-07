@@ -8478,72 +8478,14 @@ extension MenuBarItemManager {
         }
         guard !savedSectionByBaseID.isEmpty else { return false }
 
-        // macOS 27: section membership is assignment-driven, not spatial.
-        // Items left of the hidden control still read as "hidden-side" in AX
-        // even when SimpleItemHider assigns them visible — false-triggering a
-        // bulk reorder on every cache cycle after assertion reflow.
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
-            guard let hider else { return false }
-            for item in items where !item.isControlItem && item.canBeHidden && item.isMovable
-                && !item.isNonConcealableSystemItem
-            {
-                guard !item.isParkedOffMenuBarBand(among: items) else { continue }
-
-                let baseID = "\(item.tag.namespace):\(item.tag.title)"
-                guard let expectedSection = savedSectionByBaseID[baseID] else {
-                    continue
-                }
-
-                let currentSection = hider.section(for: item)
-                if currentSection != expectedSection {
-                    return true
-                }
-            }
-            return false
-        }
-
-        let hiddenMinX = controlItems.hidden.bounds.minX
-        let hiddenMaxX = controlItems.hidden.bounds.maxX
-        let ahBounds = controlItems.alwaysHidden?.bounds
-
-        // Non-concealable Apple system items (Sound/Wi-Fi/Spotlight/Siri/…) report
-        // `canBeHidden` but can neither be bundle-concealed nor reliably dragged to
-        // the hidden side, so an assigned-hidden one is *perpetually* "in the wrong
-        // section". Including it here made divergence never clear, re-firing
-        // applyProfileLayout every cache cycle (the runaway loop that thrashed the
-        // divider and hijacked the cursor). They're managed best-effort elsewhere;
-        // exclude them from divergence so only achievable (third-party) drift
-        // triggers a re-apply.
-        for item in items where !item.isControlItem && item.canBeHidden && item.isMovable
-            && !item.isNonConcealableSystemItem
-        {
-            // Assertion reflows park items off the bar band briefly; their X
-            // still reads hidden-side and would false-trigger a bulk re-apply.
-            guard !item.isParkedOffMenuBarBand(among: items) else { continue }
-
-            let baseID = "\(item.tag.namespace):\(item.tag.title)"
-            guard let expectedSection = savedSectionByBaseID[baseID] else {
-                continue
-            }
-
-            let currentSection: MenuBarSection.Name? = if item.bounds.minX >= hiddenMaxX {
-                .visible
-            } else if let ahBounds, item.bounds.maxX <= ahBounds.minX {
-                .alwaysHidden
-            } else if let ahBounds, item.bounds.minX >= ahBounds.maxX, item.bounds.maxX <= hiddenMinX {
-                .hidden
-            } else if ahBounds == nil, item.bounds.maxX <= hiddenMinX {
-                .hidden
-            } else {
-                nil
-            }
-
-            guard let currentSection else { continue }
-            if currentSection != expectedSection {
-                return true
-            }
-        }
-        return false
+        // The per-OS classification (spatial bounds on legacy, assignment via
+        // SimpleItemHider on the assertion backend) lives in the backend.
+        return MenuBarBackendFactory.current.layoutMembershipDiverged(
+            savedSectionByBaseID: savedSectionByBaseID,
+            items: items,
+            controlItems: controlItems,
+            hider: hider
+        )
     }
 
     /// Decides whether a windowID-set difference between two cache cycles is a

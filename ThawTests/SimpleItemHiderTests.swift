@@ -354,6 +354,53 @@ final class SimpleItemHiderTests: XCTestCase {
         )
     }
 
+    func testAssertionLayoutMembershipDivergedReadsHiderAssignment() {
+        // macOS 27 membership is assignment-driven: divergence must be read from
+        // SimpleItemHider.section(for:), not from the item's spatial X (which
+        // still reads hidden-side after an assertion reflow).
+        let hider = makeHider()
+        let item = MenuBarItem.fixture(
+            tag: .appItem(bundleID: "com.test.a", title: "Foo"),
+            windowID: 5,
+            bounds: CGRect(x: 200, y: 0, width: 24, height: 22)
+        )
+        hider.setSection(.hidden, item: item)
+
+        // Control-item geometry is irrelevant on this backend; supply a fixture.
+        let controlItems = MenuBarItemManager.ControlItemPair.fixture(
+            hiddenAt: CGRect(x: 100, y: 0, width: 10, height: 22)
+        )
+        let backend = AssertionMenuBarBackend()
+
+        // Assigned hidden but saved visible → divergence.
+        XCTAssertTrue(
+            backend.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Foo": .visible],
+                items: [item],
+                controlItems: controlItems,
+                hider: hider
+            )
+        )
+        // Assigned hidden and saved hidden → no divergence.
+        XCTAssertFalse(
+            backend.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Foo": .hidden],
+                items: [item],
+                controlItems: controlItems,
+                hider: hider
+            )
+        )
+        // No hider → cannot read assignment, never diverges.
+        XCTAssertFalse(
+            backend.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Foo": .visible],
+                items: [item],
+                controlItems: controlItems,
+                hider: nil
+            )
+        )
+    }
+
     func testRefresh_NoOpsWithoutAttachedAppState() {
         let hider = makeHider()
 

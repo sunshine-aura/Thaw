@@ -13,6 +13,7 @@ import XCTest
 /// Characterizes the OS-specific layout policy that moved out of
 /// `MenuBarItemManager` into the two `MenuBarBackend` adapters. Each method is
 /// exercised against both backends so the Legacy/Assertion contrast is pinned.
+@MainActor
 final class MenuBarBackendTests: XCTestCase {
     private let legacy = LegacyMenuBarBackend()
     private let assertion = AssertionMenuBarBackend()
@@ -121,6 +122,96 @@ final class MenuBarBackendTests: XCTestCase {
         // First cycle (empty previous) → nothing to diff.
         XCTAssertFalse(
             legacy.windowIDsChanged(previous: [], current: [10, 11], previousDisplayID: 1, currentDisplayID: 1)
+        )
+    }
+
+    // MARK: - layoutMembershipDiverged (Legacy spatial classification)
+
+    /// Hidden divider at x=100 (w=10); an item right of it reads visible-side.
+    private func legacyControlPair(withAlwaysHidden: Bool = false) -> MenuBarItemManager.ControlItemPair {
+        .fixture(
+            hiddenAt: CGRect(x: 100, y: 0, width: 10, height: 22),
+            alwaysHiddenAt: withAlwaysHidden ? CGRect(x: 20, y: 0, width: 10, height: 22) : nil
+        )
+    }
+
+    func testLegacyDivergesWhenItemSpatiallyLeftOfSavedSection() {
+        let controlItems = legacyControlPair()
+        // Item sits right of the hidden divider → currently visible-side.
+        let item = MenuBarItem.fixture(
+            tag: .appItem(bundleID: "com.test.a", title: "Foo"),
+            windowID: 5,
+            bounds: CGRect(x: 200, y: 0, width: 24, height: 22)
+        )
+        // Saved as hidden, but currently visible → divergence.
+        XCTAssertTrue(
+            legacy.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Foo": .hidden],
+                items: [item],
+                controlItems: controlItems,
+                hider: nil
+            )
+        )
+        // Saved as visible, matches current geometry → no divergence.
+        XCTAssertFalse(
+            legacy.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Foo": .visible],
+                items: [item],
+                controlItems: controlItems,
+                hider: nil
+            )
+        )
+    }
+
+    func testLegacyClassifiesHiddenAndAlwaysHiddenRegions() {
+        let controlItems = legacyControlPair(withAlwaysHidden: true)
+        // Between always-hidden (maxX=30) and hidden (minX=100) → hidden region.
+        let hiddenItem = MenuBarItem.fixture(
+            tag: .appItem(bundleID: "com.test.a", title: "Mid"),
+            windowID: 6,
+            bounds: CGRect(x: 50, y: 0, width: 24, height: 22)
+        )
+        // Left of the always-hidden divider (minX=20) → always-hidden region.
+        let ahItem = MenuBarItem.fixture(
+            tag: .appItem(bundleID: "com.test.a", title: "Left"),
+            windowID: 7,
+            bounds: CGRect(x: 0, y: 0, width: 15, height: 22)
+        )
+        XCTAssertFalse(
+            legacy.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Mid": .hidden, "com.test.a:Left": .alwaysHidden],
+                items: [hiddenItem, ahItem],
+                controlItems: controlItems,
+                hider: nil
+            )
+        )
+        // Same items, saved sections swapped → both diverge (returns on first).
+        XCTAssertTrue(
+            legacy.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Mid": .visible, "com.test.a:Left": .visible],
+                items: [hiddenItem, ahItem],
+                controlItems: controlItems,
+                hider: nil
+            )
+        )
+    }
+
+    func testLegacyExcludesParkedOffBandItems() {
+        let controlItems = legacyControlPair()
+        // Parked off the bar band (midY well above 80) → excluded from the check
+        // even though its X would classify it visible-side against a hidden save.
+        let parked = MenuBarItem.fixture(
+            tag: .appItem(bundleID: "com.test.a", title: "Parked"),
+            windowID: 8,
+            bounds: CGRect(x: 200, y: 1400, width: 24, height: 22)
+        )
+        XCTAssertFalse(
+            legacy.layoutMembershipDiverged(
+                savedSectionByBaseID: ["com.test.a:Parked": .hidden],
+                items: [parked],
+                controlItems: controlItems,
+                hider: nil
+            )
         )
     }
 }
