@@ -196,6 +196,13 @@ final class MenuBarBackendTests: XCTestCase {
         )
     }
 
+    // MARK: - controlItemEnforcementStrategy
+
+    func testControlItemEnforcementStrategyPerBackend() {
+        XCTAssertEqual(legacy.controlItemEnforcementStrategy, .legacyDividerSwap)
+        XCTAssertEqual(assertion.controlItemEnforcementStrategy, .assertionDividerReorder)
+    }
+
     // MARK: - persistLayoutSnapshot
 
     func testPersistLayoutSnapshotActionPerBackend() {

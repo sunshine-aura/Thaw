@@ -6323,7 +6323,8 @@ extension MenuBarItemManager {
     ) async {
         let hidden = controlItems.hidden
 
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
+        switch MenuBarBackendFactory.current.controlItemEnforcementStrategy {
+        case .assertionDividerReorder:
             let experimentalSystemItemHiding = appState?.settings.advanced
                 .enableExperimentalSystemItemHiding ?? false
             guard hidden.isPhysicallyOrderable(
@@ -6403,20 +6404,21 @@ extension MenuBarItemManager {
                 }
             }
             return
-        }
 
-        guard
-            let alwaysHidden = controlItems.alwaysHidden,
-            hidden.bounds.maxX <= alwaysHidden.bounds.minX
-        else {
-            return
-        }
+        case .legacyDividerSwap:
+            guard
+                let alwaysHidden = controlItems.alwaysHidden,
+                hidden.bounds.maxX <= alwaysHidden.bounds.minX
+            else {
+                return
+            }
 
-        do {
-            MenuBarItemManager.diagLog.debug("Control items have incorrect order")
-            try await move(item: alwaysHidden, to: .leftOfItem(hidden), skipInputPause: true)
-        } catch {
-            MenuBarItemManager.diagLog.error("Error enforcing control item order: \(error)")
+            do {
+                MenuBarItemManager.diagLog.debug("Control items have incorrect order")
+                try await move(item: alwaysHidden, to: .leftOfItem(hidden), skipInputPause: true)
+            } catch {
+                MenuBarItemManager.diagLog.error("Error enforcing control item order: \(error)")
+            }
         }
     }
 

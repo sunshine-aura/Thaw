@@ -20,3 +20,16 @@ enum LayoutSnapshotAction: Equatable {
     /// the manager's blocked-item (`x == -1`) and cross-display guards.
     case saveSpatialOrder
 }
+
+/// How the manager should keep the section-divider control items ordered. The
+/// backend selects the model; the manager runs the (async) moves, since the
+/// enforcement interleaves synthetic-drag execution with the divider-thrash
+/// guard and per-move error handling.
+enum ControlItemEnforcementStrategy: Equatable {
+    /// macOS 27: dividers are assignment-anchored and reordered via the planner
+    /// (`LayoutPlanner.dividerMoveDestination`) behind the thrash guard.
+    case assertionDividerReorder
+    /// Legacy: physically swap the always-hidden divider left of the hidden
+    /// divider when their geometry is inverted.
+    case legacyDividerSwap
+}

@@ -81,6 +81,9 @@ protocol MenuBarBackend: Sendable {
     /// open (`shouldPersist`). Legacy saves the position-derived spatial order;
     /// the assertion backend mirrors the assignment-driven section order.
     nonisolated func persistLayoutSnapshot(shouldPersist: Bool) -> LayoutSnapshotAction
+
+    /// Which section-divider enforcement model applies on this OS.
+    nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy { get }
 }
 
 struct LegacyMenuBarBackend: MenuBarBackend {
@@ -192,6 +195,10 @@ struct LegacyMenuBarBackend: MenuBarBackend {
     nonisolated func persistLayoutSnapshot(shouldPersist: Bool) -> LayoutSnapshotAction {
         shouldPersist ? .saveSpatialOrder : .none
     }
+
+    nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy {
+        .legacyDividerSwap
+    }
 }
 
 struct AssertionMenuBarBackend: MenuBarBackend {
@@ -300,6 +307,10 @@ struct AssertionMenuBarBackend: MenuBarBackend {
 
     nonisolated func persistLayoutSnapshot(shouldPersist: Bool) -> LayoutSnapshotAction {
         shouldPersist ? .mirrorSectionOrder : .none
+    }
+
+    nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy {
+        .assertionDividerReorder
     }
 }
 
