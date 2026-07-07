@@ -82,7 +82,7 @@ final class LayoutBarItemView: LayoutBarArrangedView {
     }
 
     override func draggingImage() -> NSImage? {
-        if shouldUsePlaceholderImage(for: cachedImage) {
+        if shouldPreferPlaceholderImage {
             return placeholderBitmapImage()
         }
         return cachedImage?.nsImage ?? placeholderBitmapImage()
@@ -169,8 +169,8 @@ final class LayoutBarItemView: LayoutBarArrangedView {
 
     override func draw(_: NSRect) {
         if !isDraggingPlaceholder {
-            if shouldUsePlaceholderImage(for: cachedImage) {
-                drawPlaceholder()
+            if shouldPreferPlaceholderImage {
+                drawOverflowFallback()
             } else if let capturedImage = cachedImage?.nsImage {
                 capturedImage.draw(
                     in: bounds,
@@ -207,8 +207,33 @@ final class LayoutBarItemView: LayoutBarArrangedView {
         return (superview as? LayoutBarContainer)?.section != .visible
     }
 
-    private func shouldUsePlaceholderImage(for image: MenuBarItemImageCache.CapturedImage?) -> Bool {
-        shouldPreferPlaceholderImage && image == nil
+    /// Draws the owning app's icon in place of the captured glyph for concealed
+    /// native-overflow items, whose macOS 27 crops can render distorted. Falls
+    /// back to the generic box placeholder when no icon resolves (e.g. Thaw's
+    /// own control items). See ``OverflowFallbackIcon``. Interim until the crop
+    /// geometry is fixed.
+    private func drawOverflowFallback() {
+        guard
+            !item.isControlItem,
+            let icon = OverflowFallbackIcon.image(for: item)
+        else {
+            drawPlaceholder()
+            return
+        }
+        let side = min(bounds.width, bounds.height)
+        guard side > 0 else { return }
+        let iconRect = CGRect(
+            x: bounds.midX - (side / 2),
+            y: bounds.midY - (side / 2),
+            width: side,
+            height: side
+        )
+        icon.draw(
+            in: iconRect,
+            from: .zero,
+            operation: .sourceOver,
+            fraction: isEnabled ? 1.0 : 0.5
+        )
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -241,7 +266,7 @@ final class LayoutBarItemView: LayoutBarArrangedView {
     }
 
     private func preferredSizeForCurrentDisplayMode(_ image: MenuBarItemImageCache.CapturedImage?) -> CGSize {
-        preferredSize(for: shouldUsePlaceholderImage(for: image) ? nil : image)
+        preferredSize(for: shouldPreferPlaceholderImage ? nil : image)
     }
 
     private static func preferredSize(

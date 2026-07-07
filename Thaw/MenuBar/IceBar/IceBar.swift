@@ -508,8 +508,18 @@ private struct IceBarContentView: View {
         }
     }
 
+    /// Interim: concealed items on macOS 27 native overflow can capture as
+    /// distorted glyphs; show the owning app's icon instead until the crop
+    /// geometry is fixed. See ``OverflowFallbackIcon``.
+    private var useOverflowFallback: Bool {
+        OverflowFallbackIcon.isActive(for: section, appState: appState)
+    }
+
     private func image(for item: MenuBarItem) -> NSImage? {
-        imageCache.image(for: item.tag)?.nsImage
+        if useOverflowFallback {
+            return OverflowFallbackIcon.image(for: item)
+        }
+        return imageCache.image(for: item.tag)?.nsImage
     }
 
     var body: some View {
@@ -671,7 +681,8 @@ private struct IceBarContentView: View {
                                 section: section,
                                 displayID: screen.displayID,
                                 maxHeight: itemMaxHeight,
-                                tooltipDelay: appState.settings.advanced.tooltipDelay
+                                tooltipDelay: appState.settings.advanced.tooltipDelay,
+                                useOverflowFallback: useOverflowFallback
                             )
                         }
                     }
@@ -696,7 +707,8 @@ private struct IceBarContentView: View {
                                 section: section,
                                 displayID: screen.displayID,
                                 maxHeight: itemMaxHeight,
-                                tooltipDelay: appState.settings.advanced.tooltipDelay
+                                tooltipDelay: appState.settings.advanced.tooltipDelay,
+                                useOverflowFallback: useOverflowFallback
                             )
                         }
                     }
@@ -723,7 +735,8 @@ private struct IceBarContentView: View {
                                         section: section,
                                         displayID: screen.displayID,
                                         maxHeight: itemMaxHeight,
-                                        tooltipDelay: appState.settings.advanced.tooltipDelay
+                                        tooltipDelay: appState.settings.advanced.tooltipDelay,
+                                        useOverflowFallback: useOverflowFallback
                                     )
                                     if rows.count > 1 {
                                         itemView
@@ -768,6 +781,9 @@ private struct IceBarItemView: View {
     let displayID: CGDirectDisplayID
     let maxHeight: CGFloat?
     let tooltipDelay: TimeInterval
+    /// See ``OverflowFallbackIcon`` — draw the app icon instead of the (possibly
+    /// distorted) captured glyph for concealed native-overflow items.
+    let useOverflowFallback: Bool
 
     private var leftClickAction: () -> Void {
         return { [weak itemManager, weak menuBarManager] in
@@ -847,7 +863,10 @@ private struct IceBarItemView: View {
     }
 
     private var image: NSImage? {
-        imageCache.image(for: item.tag)?.nsImage
+        if useOverflowFallback {
+            return OverflowFallbackIcon.image(for: item)
+        }
+        return imageCache.image(for: item.tag)?.nsImage
     }
 
     private func targetSize(for image: NSImage) -> CGSize {
