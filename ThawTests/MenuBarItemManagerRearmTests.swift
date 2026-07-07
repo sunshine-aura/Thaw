@@ -111,10 +111,9 @@ final class MenuBarItemManagerRearmTests: XCTestCase {
         ]
 
         XCTAssertTrue(
-            MenuBarItemManager.shouldRetainLastGoodCacheForMissingVisibleControlItem(
+            AssertionMenuBarBackend().shouldRetainLastGoodCache(
                 snapshotItems: snapshot,
-                previousCachedItems: previous,
-                supportsLegacySectionHiding: false
+                previousCachedItems: previous
             )
         )
     }
@@ -139,15 +138,13 @@ final class MenuBarItemManagerRearmTests: XCTestCase {
         ]
 
         XCTAssertTrue(
-            MenuBarItemManager.canSynthesizeMacOS27ControlItems(
-                snapshotItems: snapshotWithVisibleControl,
-                supportsLegacySectionHiding: false
+            AssertionMenuBarBackend().canSynthesizeControlItems(
+                snapshotItems: snapshotWithVisibleControl
             )
         )
         XCTAssertFalse(
-            MenuBarItemManager.canSynthesizeMacOS27ControlItems(
-                snapshotItems: snapshotWithoutVisibleControl,
-                supportsLegacySectionHiding: false
+            AssertionMenuBarBackend().canSynthesizeControlItems(
+                snapshotItems: snapshotWithoutVisibleControl
             )
         )
     }

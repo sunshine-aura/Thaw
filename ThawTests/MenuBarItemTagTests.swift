@@ -1191,19 +1191,19 @@ final class MacOS27LayoutAnchorOrderingTests: XCTestCase {
         }
 
         let bounds = CGRect(x: 120, y: 0, width: 42, height: 24)
+        // Assertion backend (macOS 27): AX bounds are the source of truth.
         XCTAssertEqual(
-            MenuBarItemManager.relocationBounds(
+            AssertionMenuBarBackend().relocationBounds(
                 itemBounds: bounds,
-                windowServerBounds: nil,
-                supportsLegacySectionHiding: false
+                windowServerBounds: nil
             ),
             bounds
         )
+        // Legacy backend trusts the WindowServer geometry, which is nil here.
         XCTAssertNil(
-            MenuBarItemManager.relocationBounds(
+            LegacyMenuBarBackend().relocationBounds(
                 itemBounds: bounds,
-                windowServerBounds: nil,
-                supportsLegacySectionHiding: true
+                windowServerBounds: nil
             )
         )
     }

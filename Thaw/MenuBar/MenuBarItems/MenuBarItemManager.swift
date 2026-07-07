@@ -1795,26 +1795,6 @@ final class MenuBarItemManager: ObservableObject {
 // MARK: - Cache Gate
 
 extension MenuBarItemManager {
-    /// Selects the bounds source used to validate an automatic relocation.
-    /// macOS 27 items have synthetic window IDs, so their AX bounds are the
-    /// source of truth and a WindowServer lookup is neither valid nor useful.
-    static func relocationBounds(
-        itemBounds: CGRect,
-        windowServerBounds: CGRect?,
-        supportsLegacySectionHiding: Bool
-    ) -> CGRect? {
-        if supportsLegacySectionHiding {
-            return windowServerBounds
-        }
-        guard itemBounds.origin.x != -1,
-              itemBounds.width > 0,
-              itemBounds.height > 0
-        else {
-            return nil
-        }
-        return itemBounds
-    }
-
     /// Stable macOS 27 cache signature in live visual order. AX enumeration can
     /// arrive in arbitrary array order, so geometry determines order and the
     /// identifier breaks ties. Unlike an alphabetically sorted identity set,
@@ -1829,36 +1809,6 @@ extension MenuBarItemManager {
                 return lhs.bounds.midX < rhs.bounds.midX
             }
             .map(\.uniqueIdentifier)
-    }
-
-    /// Whether a macOS 27 AX snapshot should be treated as a transient miss
-    /// because Thaw's own visible control item disappeared from enumeration.
-    static func shouldRetainLastGoodCacheForMissingVisibleControlItem(
-        snapshotItems: [MenuBarItem],
-        previousCachedItems: [MenuBarItem],
-        supportsLegacySectionHiding: Bool
-    ) -> Bool {
-        guard !supportsLegacySectionHiding, !snapshotItems.isEmpty else {
-            return false
-        }
-        let hadVisibleControlItem = previousCachedItems.contains {
-            $0.tag.matchesVisibleControlItem
-        }
-        let hasVisibleControlItem = snapshotItems.contains {
-            $0.tag.matchesVisibleControlItem
-        }
-        return hadVisibleControlItem && !hasVisibleControlItem
-    }
-
-    /// macOS 27 may hide zero-width divider controls from AX, but the visible
-    /// Thaw status item must still be present before we synthesize dividers.
-    static func canSynthesizeMacOS27ControlItems(
-        snapshotItems: [MenuBarItem],
-        supportsLegacySectionHiding: Bool
-    ) -> Bool {
-        !supportsLegacySectionHiding && snapshotItems.contains {
-            $0.tag.matchesVisibleControlItem
-        }
     }
 
     /// Serializes cache operations to prevent races between concurrent
@@ -2634,10 +2584,9 @@ extension MenuBarItemManager {
         // because items is filtered.
         let itemWindowIDs = (currentItemWindowIDs ?? items.reversed().map(\.windowID))
             .filter { !cloneWindowIDs.contains($0) }
-        if Self.shouldRetainLastGoodCacheForMissingVisibleControlItem(
+        if MenuBarBackendFactory.current.shouldRetainLastGoodCache(
             snapshotItems: items,
-            previousCachedItems: itemCache.managedItems,
-            supportsLegacySectionHiding: MenuBarBackendFactory.current.supportsLegacySectionHiding
+            previousCachedItems: itemCache.managedItems
         ) {
             MenuBarItemManager.diagLog.warning(
                 "cacheItemsRegardless: Thaw visible control item missing from AX snapshot; retaining last-good cache. Items remaining: \(items.count), windowIDs: \(itemWindowIDs.count)"
@@ -2680,10 +2629,7 @@ extension MenuBarItemManager {
             await MainActor.run {
                 self.areControlItemsMissing = false
             }
-        } else if Self.canSynthesizeMacOS27ControlItems(
-            snapshotItems: items,
-            supportsLegacySectionHiding: MenuBarBackendFactory.current.supportsLegacySectionHiding
-        ) {
+        } else if MenuBarBackendFactory.current.canSynthesizeControlItems(snapshotItems: items) {
             // macOS 27: the hidden / always-hidden control items are kept
             // "present but invisible" by setting their NSStatusItem length to 0.
             // macOS 27 no longer vends an Accessibility element (or WindowServer
@@ -6135,14 +6081,13 @@ extension MenuBarItemManager {
             // Skip items with no valid bounds (transient clone windows
             // etc.). This live check stays in the orchestrator because
             // it requires Bridging.
-            let supportsLegacySectionHiding = MenuBarBackendFactory.current.supportsLegacySectionHiding
-            let windowServerBounds = supportsLegacySectionHiding
+            let backend = MenuBarBackendFactory.current
+            let windowServerBounds = backend.supportsLegacySectionHiding
                 ? Bridging.getWindowBounds(for: candidate.windowID)
                 : nil
-            guard Self.relocationBounds(
+            guard backend.relocationBounds(
                 itemBounds: candidate.bounds,
-                windowServerBounds: windowServerBounds,
-                supportsLegacySectionHiding: supportsLegacySectionHiding
+                windowServerBounds: windowServerBounds
             ) != nil else {
                 MenuBarItemManager.diagLog.warning("Skipping relocation for \(candidate.logString); no valid bounds, likely transient")
                 return false
@@ -8612,35 +8557,8 @@ extension MenuBarItemManager {
     /// item quit fires a full bulk re-sort on every cross-screen focus change,
     /// which on a notched display drifts items into always-hidden. A display
     /// switch is not a layout edit, so it must not advance the gate; the
-    /// divergence check still runs and catches genuine section drift.
-    static nonisolated func windowIDsChanged(
-        previous: Set<CGWindowID>,
-        current: Set<CGWindowID>,
-        previousDisplayID: CGDirectDisplayID?,
-        currentDisplayID: CGDirectDisplayID?,
-        supportsLegacySectionHiding: Bool = true
-    ) -> Bool {
-        // macOS 27's AX provider synthesizes IDs from logical item identity,
-        // and control items are removed from `items` before this gate runs.
-        // Comparing that managed-item set with the earlier all-item snapshot
-        // makes the extracted divider look like a quit on every cache cycle.
-        // Logical identity and assignment divergence own restore detection on
-        // that backend; retain the real-window disappearance signal on ≤26.
-        guard supportsLegacySectionHiding else { return false }
-        // First cycle: no prior frame to diff against.
-        guard !previous.isEmpty else { return false }
-        // The active menu bar display moved to another screen. With separate
-        // Spaces the prior display's windows are no longer on the active space,
-        // so they read as missing even though the same logical items are still
-        // present elsewhere. Not an item quit; do not advance the gate. Only
-        // suppress when both displays are known and genuinely differ, so an
-        // unknown display falls back to the plain disappearance signal.
-        if let previousDisplayID, let currentDisplayID, previousDisplayID != currentDisplayID {
-            return false
-        }
-        return !previous.isSubset(of: current)
-    }
-
+    /// divergence check still runs and catches genuine section drift. The
+    /// per-OS policy now lives in ``MenuBarBackend/windowIDsChanged(previous:current:previousDisplayID:currentDisplayID:)``.
     func applySavedLayout(
         items: [MenuBarItem],
         previousWindowIDs: [CGWindowID],
@@ -8731,12 +8649,11 @@ extension MenuBarItemManager {
         // happy path on app quit/relaunch pays nothing.
         let currentWindowIDSet = Set(items.map(\.windowID))
         let previousWindowIDSet = Set(previousWindowIDs)
-        let windowIDsChanged = Self.windowIDsChanged(
+        let windowIDsChanged = MenuBarBackendFactory.current.windowIDsChanged(
             previous: previousWindowIDSet,
             current: currentWindowIDSet,
             previousDisplayID: previousDisplayID,
-            currentDisplayID: currentDisplayID,
-            supportsLegacySectionHiding: MenuBarBackendFactory.current.supportsLegacySectionHiding
+            currentDisplayID: currentDisplayID
         )
         let layoutDiverged = windowIDsChanged
             ? false
