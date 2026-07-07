@@ -1373,6 +1373,25 @@ final class SimpleItemHider: ObservableObject {
             return
         }
 
+        // Resolve every item to the TrailingItemPreferredPositions key it is
+        // actually stored under, once, against a single snapshot taken before
+        // the plist pass mutates the dictionary. Dynamic-title apps (iStat
+        // Menus) register under a stable internal identifier, so the naive
+        // status:<bundle>::<title> key never matches what hideItems/showItems
+        // and the position lock operate on — comparing the naive key would
+        // leave those items in BOTH the plist-handled set and the assertion
+        // input, double-handling them and forcing a whole-bar reflow.
+        let positionsSnapshot = positionStore.readPositions()
+        let snapshotKeys = Array(positionsSnapshot.keys)
+        func resolvedPlistKey(for item: MenuBarItem) -> String {
+            TrailingItemPreferredPositionsKeys.resolveKey(
+                for: item,
+                existingKeys: snapshotKeys,
+                positions: positionsSnapshot,
+                liveItems: allItems
+            ) ?? TrailingItemPreferredPositionsKeys.naiveKey(for: item)
+        }
+
         // ── 1. Plist-based hide/show (experimental) ──
         var toHide = [MenuBarItem]()
         var toShow = [MenuBarItem]()
@@ -1397,7 +1416,7 @@ final class SimpleItemHider: ObservableObject {
         if !plistHandledKeys.isEmpty {
             for item in allItems where Self.isCGSWindowHideable(item) {
                 guard (effectiveAssignment[item.uniqueIdentifier] ?? .visible) != .visible else { continue }
-                if plistHandledKeys.contains(TrailingItemPositionStore.key(for: item)) {
+                if plistHandledKeys.contains(resolvedPlistKey(for: item)) {
                     backendAssignment.removeValue(forKey: item.uniqueIdentifier)
                 }
             }
@@ -1410,7 +1429,7 @@ final class SimpleItemHider: ObservableObject {
         for item in allItems where Self.isCGSWindowHideable(item) {
             let section = effectiveAssignment[item.uniqueIdentifier] ?? .visible
             guard section != .visible else { continue }
-            if plistHandledKeys.contains(TrailingItemPositionStore.key(for: item)) { continue }
+            if plistHandledKeys.contains(resolvedPlistKey(for: item)) { continue }
             let pid = item.sourcePID ?? item.ownerPID
             if #available(macOS 27, *) {
                 guard item.sourcePID != nil else { continue }
@@ -1438,7 +1457,7 @@ final class SimpleItemHider: ObservableObject {
         let visibleItemKeys = Set(
             allItems
                 .filter { (effectiveAssignment[$0.uniqueIdentifier] ?? .visible) == .visible }
-                .map { TrailingItemPositionStore.key(for: $0) }
+                .map { resolvedPlistKey(for: $0) }
         )
         positionStore.lockVisiblePositions(visibleItemKeys: visibleItemKeys, allItems: allItems)
     }
