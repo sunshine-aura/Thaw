@@ -34,16 +34,6 @@ enum ControlItemEnforcementStrategy: Equatable {
     case legacyDividerSwap
 }
 
-/// How "reset layout to fresh state" is realized on this OS.
-enum LayoutResetStrategy: Equatable {
-    /// macOS 27: sweep every hideable item into Hidden via the assignment model
-    /// (items aren't position-movable, dividers aren't real).
-    case assignmentSweep
-    /// Legacy: clear persisted state and physically move items to the Hidden
-    /// section behind the section dividers.
-    case legacyMoveToHidden
-}
-
 enum PreferredMovePath: Equatable {
     case legacyWindowServer
     case preferredPositionsThenCommandDrag

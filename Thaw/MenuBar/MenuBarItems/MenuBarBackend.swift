@@ -85,9 +85,6 @@ protocol MenuBarBackend: Sendable {
     /// Which section-divider enforcement model applies on this OS.
     nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy { get }
 
-    /// How "reset layout to fresh state" is realized on this OS.
-    nonisolated var layoutResetStrategy: LayoutResetStrategy { get }
-
     nonisolated var preferredMovePath: PreferredMovePath { get }
 
     nonisolated func allowsSectionBoundaryDividerTarget(allowExplicitOptIn: Bool) -> Bool
@@ -219,10 +216,6 @@ struct LegacyMenuBarBackend: MenuBarBackend {
 
     nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy {
         .legacyDividerSwap
-    }
-
-    nonisolated var layoutResetStrategy: LayoutResetStrategy {
-        .legacyMoveToHidden
     }
 
     nonisolated var preferredMovePath: PreferredMovePath {
@@ -377,10 +370,6 @@ struct AssertionMenuBarBackend: MenuBarBackend {
 
     nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy {
         .assertionDividerReorder
-    }
-
-    nonisolated var layoutResetStrategy: LayoutResetStrategy {
-        .assignmentSweep
     }
 
     nonisolated var preferredMovePath: PreferredMovePath {

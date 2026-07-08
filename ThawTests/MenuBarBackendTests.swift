@@ -203,11 +203,6 @@ final class MenuBarBackendTests: XCTestCase {
         XCTAssertEqual(assertion.controlItemEnforcementStrategy, .assertionDividerReorder)
     }
 
-    func testLayoutResetStrategyPerBackend() {
-        XCTAssertEqual(legacy.layoutResetStrategy, .legacyMoveToHidden)
-        XCTAssertEqual(assertion.layoutResetStrategy, .assignmentSweep)
-    }
-
     func testMovePathAndDividerTargetPolicyPerBackend() {
         XCTAssertEqual(legacy.preferredMovePath, .legacyWindowServer)
         XCTAssertTrue(legacy.allowsSectionBoundaryDividerTarget(allowExplicitOptIn: false))
