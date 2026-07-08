@@ -246,13 +246,13 @@ enum LayoutSolver {
         // planner, so use legacy movability rather than macOS 27's broader
         // layout-anchor policy. The Thaw icon is a control item but must always
         // be visible, so we admit it here.
-        let leftmostItems = items
-            .filter {
+        let leftmostItems = MenuBarItem.sortByLeadingEdge(
+            items.filter {
                 $0.bounds.maxX <= observation.hiddenBounds.minX &&
                     $0.tag.isMovableInLegacySectionLayout &&
                     (!$0.isControlItem || $0.tag.matchesVisibleControlItem)
             }
-            .sorted { $0.bounds.minX < $1.bounds.minX }
+        )
 
         guard !leftmostItems.isEmpty else {
             return .noop(reason: .noLeftmostItems)
@@ -506,7 +506,9 @@ enum LayoutSolver {
         // order so leftmost-from-visible lands at the deepest end of
         // hidden.
         var controlSet: Set<String> = [controlUIDs.hidden]
-        if let ahUID = controlUIDs.alwaysHidden { controlSet.insert(ahUID) }
+        if let ahUID = controlUIDs.alwaysHidden {
+            controlSet.insert(ahUID)
+        }
 
         let hiddenStart = desiredFiltered.firstIndex(of: controlUIDs.hidden)
             .map { $0 + 1 } ?? desiredFiltered.endIndex
@@ -661,7 +663,9 @@ enum LayoutSolver {
         }
 
         var controlSet: Set<String> = [hiddenCtrlUID]
-        if let ahUID = ahCtrlUID { controlSet.insert(ahUID) }
+        if let ahUID = ahCtrlUID {
+            controlSet.insert(ahUID)
+        }
 
         let ahUIDs = desiredFiltered.filter {
             !controlSet.contains($0) && (sectionMap[$0] ?? "visible") == "alwaysHidden"
@@ -675,7 +679,9 @@ enum LayoutSolver {
 
         var fullSequence = [String]()
         fullSequence.append(contentsOf: ahUIDs)
-        if let ahCtrlUID { fullSequence.append(ahCtrlUID) }
+        if let ahCtrlUID {
+            fullSequence.append(ahCtrlUID)
+        }
         fullSequence.append(contentsOf: hiddenUIDs)
         fullSequence.append(hiddenCtrlUID)
         fullSequence.append(contentsOf: visibleUIDs)

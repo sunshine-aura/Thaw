@@ -265,11 +265,10 @@ enum MenuBarAgentPositionStore {
         liveItems: [MenuBarItem],
         experimentalSystemItemHiding: Bool = false
     ) -> (anchor: MenuBarItem, far: MenuBarItem?)? {
-        let ordered = liveItems
+        let ordered = MenuBarItem.sortByLeadingEdge(liveItems
             .filter { !$0.isSystemClone }
             .filter { $0.isPhysicallyOrderable(experimentalSystemItemHiding: experimentalSystemItemHiding) }
-            .filter { !$0.tag.matchesIgnoringWindowID(item.tag) }
-            .sorted { $0.bounds.minX < $1.bounds.minX }
+            .filter { !$0.tag.matchesIgnoringWindowID(item.tag) })
 
         let anchor = destination.targetItem
         guard let anchorIndex = ordered.firstIndex(where: {

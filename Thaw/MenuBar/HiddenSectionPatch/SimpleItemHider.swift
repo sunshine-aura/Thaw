@@ -1551,24 +1551,24 @@ final class SimpleItemHider: ObservableObject {
     }
 
     private func logMenuBarAgentSequence(reason: String, items: [MenuBarItem]) {
-        let sequence = items
-            .filter { $0.tag.namespace == .menuBarAgent }
-            .sorted { $0.bounds.minX < $1.bounds.minX }
-            .map { item in
-                "\(item.uniqueIdentifier) title=\(item.title ?? "nil") frame=\(NSStringFromRect(item.bounds))"
-            }
+        let sequence = MenuBarItem.sortByLeadingEdge(
+            items.filter { $0.tag.namespace == .menuBarAgent }
+        )
+        .map { item in
+            "\(item.uniqueIdentifier) title=\(item.title ?? "nil") frame=\(NSStringFromRect(item.bounds))"
+        }
         diagLog.info("menuBarAgentSequence[\(reason)] count=\(sequence.count) \(sequence.joined(separator: " | "))")
     }
 
     private func logThawAXSequence(reason: String, items: [MenuBarItem]) {
-        let sequence = items
-            .filter { item in
+        let sequence = MenuBarItem.sortByLeadingEdge(
+            items.filter { item in
                 item.tag.namespace == .thaw || item.uniqueIdentifier.contains("Thaw.ControlItem.")
             }
-            .sorted { $0.bounds.minX < $1.bounds.minX }
-            .map { item in
-                "\(item.uniqueIdentifier) title=\(item.title ?? "nil") frame=\(NSStringFromRect(item.bounds))"
-            }
+        )
+        .map { item in
+            "\(item.uniqueIdentifier) title=\(item.title ?? "nil") frame=\(NSStringFromRect(item.bounds))"
+        }
         diagLog.info("thawAXSequence[\(reason)] count=\(sequence.count) \(sequence.joined(separator: " | "))")
     }
 

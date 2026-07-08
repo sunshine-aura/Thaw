@@ -170,9 +170,9 @@ struct MenuBarItem: CustomStringConvertible {
         }
         guard !concealedIdentifiers.isEmpty else { return false }
 
-        let sorted = peers
-            .filter { !$0.isControlItem && $0.bounds.width > 0 }
-            .sorted { $0.bounds.midX < $1.bounds.midX }
+        let sorted = MenuBarItem.sortByVisualCenter(
+            peers.filter { !$0.isControlItem && $0.bounds.width > 0 }
+        )
         guard let index = sorted.firstIndex(where: { $0.windowID == windowID }) else {
             return false
         }
