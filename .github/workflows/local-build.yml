@@ -30,6 +30,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Ad-hoc sign app bundle
+        run: |
+          APP_PATH=$(find build/DerivedData/Build/Products/Release -maxdepth 1 -name 'Thaw.app' -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "Thaw.app not found"
+            find build/DerivedData/Build/Products -maxdepth 3 -print
+            exit 1
+          fi
+          codesign --force --sign - "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+          codesign --force --sign - "$APP_PATH/Contents/XPCServices/MenuBarItemService.xpc"
+          codesign --force --sign - --identifier com.stonerl.Thaw "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH"
+
       - name: Package app artifact
         run: |
           APP_PATH=$(find build/DerivedData/Build/Products/Release -maxdepth 1 -name 'Thaw.app' -print -quit)
@@ -38,11 +52,11 @@ jobs:
             find build/DerivedData/Build/Products -maxdepth 3 -print
             exit 1
           fi
-          ditto -c -k --keepParent "$APP_PATH" Thaw-1.2.0-local-thaw-unsigned.zip
+          ditto -c -k --keepParent "$APP_PATH" Thaw-1.2.0-local-thaw-signed.zip
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Thaw-1.2.0-local-thaw-unsigned
-          path: Thaw-1.2.0-local-thaw-unsigned.zip
+          name: Thaw-1.2.0-local-thaw-signed
+          path: Thaw-1.2.0-local-thaw-signed.zip
           if-no-files-found: error
