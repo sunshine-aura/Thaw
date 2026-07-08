@@ -216,8 +216,8 @@ final class TrailingItemPreferredPositionsKeysTests: XCTestCase {
         let keys = Array(positions.keys)
 
         for probe in [cpu, mem, net] {
-            let trailing = TrailingItemPositionStore.resolvePositionalKey(
-                for: probe, existingKeys: keys, positions: positions, allItems: liveItems
+            let trailing = TrailingItemPreferredPositionsKeys.resolvePositionalKey(
+                for: probe, existingKeys: keys, positions: positions, liveItems: liveItems
             )
             let agent = MenuBarAgentPositionStore.resolveKey(
                 for: probe, existingKeys: keys, positions: positions, liveItems: liveItems
@@ -226,8 +226,8 @@ final class TrailingItemPreferredPositionsKeysTests: XCTestCase {
         }
         // And the leftmost live sibling maps to the largest-weight key (cpu=50).
         XCTAssertEqual(
-            TrailingItemPositionStore.resolvePositionalKey(
-                for: cpu, existingKeys: keys, positions: positions, allItems: liveItems
+            TrailingItemPreferredPositionsKeys.resolvePositionalKey(
+                for: cpu, existingKeys: keys, positions: positions, liveItems: liveItems
             ),
             "status:com.bjango.istatmenus::com.bjango.istatmenus.cpu"
         )

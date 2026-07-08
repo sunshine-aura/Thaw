@@ -294,9 +294,9 @@ final class TrailingItemPositionStore {
         positions: [String: Int],
         allItems: [MenuBarItem]
     ) -> Int {
-        let visible = allItems
-            .filter { $0.isOnScreen && !$0.isSystemClone }
-            .sorted { $0.bounds.midX < $1.bounds.midX }
+        let visible = MenuBarItem.sortByVisualCenter(
+            allItems.filter { $0.isOnScreen && !$0.isSystemClone }
+        )
 
         guard let itemIndex = visible.firstIndex(where: {
             $0.tag.matchesIgnoringWindowID(item.tag)
@@ -362,44 +362,12 @@ final class TrailingItemPositionStore {
         TrailingItemPreferredPositionsKeys.naiveKey(for: item)
     }
 
-    /// Resolves a live item to its existing key via the title-based tiers only.
-    /// Delegates to the shared
-    /// ``TrailingItemPreferredPositionsKeys/titleTierKey(for:existingKeys:)``;
-    /// returns nil when the item uses a stable internal identifier (e.g. iStat
-    /// Menus) so the caller can fall back to ``resolvePositionalKey``.
-    static func resolvedPositionKey(
-        for item: MenuBarItem,
-        existingKeys: [String]
-    ) -> String? {
-        TrailingItemPreferredPositionsKeys.titleTierKey(for: item, existingKeys: existingKeys)
-    }
-
-    /// Resolves a live item to its key by matching its sibling order within the
-    /// owning app's family against the same app's family of keys. Delegates to
-    /// the shared, axis-aware
-    /// ``TrailingItemPreferredPositionsKeys/resolvePositionalKey(for:existingKeys:positions:liveItems:)``.
-    static func resolvePositionalKey(
-        for item: MenuBarItem,
-        existingKeys: [String],
-        positions: [String: Int],
-        allItems: [MenuBarItem]
-    ) -> String? {
-        TrailingItemPreferredPositionsKeys.resolvePositionalKey(
-            for: item,
-            existingKeys: existingKeys,
-            positions: positions,
-            liveItems: allItems
-        )
-    }
-
-    /// Resolves a live item to its existing key, trying the title-based tiers
-    /// first and falling back to the positional heuristic for dynamic-title
-    /// apps. The single entry point that replaces the two-step
-    /// ``resolvedPositionKey`` `??` ``resolvePositionalKey`` dance. Delegates to
-    /// the shared
+    /// Resolves a live item to its existing plist key, trying the title-based tiers
+    /// first and falling back to the positional heuristic for dynamic-title apps.
+    /// Delegates to
     /// ``TrailingItemPreferredPositionsKeys/resolveKey(for:existingKeys:positions:liveItems:)``;
-    /// `positions` and `liveItems` are only consulted by the positional
-    /// fallback, so omit them to use the title-only tiers (e.g. from tests).
+    /// `positions` and `liveItems` are only consulted by the positional fallback,
+    /// so omit them to use the title-only tiers (e.g. from tests).
     static func resolveKey(
         for item: MenuBarItem,
         existingKeys: [String],
