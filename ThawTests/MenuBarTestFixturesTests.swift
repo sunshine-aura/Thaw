@@ -229,6 +229,12 @@ final class ControlItemSectionDividerTests: XCTestCase {
 // MARK: - ControlItem Primary Action Tests
 
 final class ControlItemPrimaryActionTests: XCTestCase {
+    func testSupportedAddTargetTypeEncodings() {
+        XCTAssertTrue(ControlItem.isSupportedAddTargetTypeEncoding("v@:@:Q"))
+        XCTAssertTrue(ControlItem.isSupportedAddTargetTypeEncoding("v40@0:8@16:24Q32"))
+        XCTAssertFalse(ControlItem.isSupportedAddTargetTypeEncoding("v@:"))
+    }
+
     func testPlainPrimaryActionTogglesSection() {
         XCTAssertEqual(primaryAction(), .toggleSection)
     }

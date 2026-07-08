@@ -87,6 +87,22 @@ final class ControlItem: NSObject {
         }
     }
 
+    /// Whether `encoding` is a known ObjC type string for
+    /// `addTarget:action:forControlEvents:` with the standard
+    /// `(void, id, SEL, id, SEL, NSUInteger)` call convention.
+    static nonisolated func isSupportedAddTargetTypeEncoding(_ encoding: String) -> Bool {
+        // Compact encoding used on older SDKs / some architectures.
+        if encoding.hasPrefix("v@:@:"), encoding.hasSuffix("Q") {
+            return true
+        }
+        // Structured arm64 encoding observed on macOS 27 (e.g. `v40@0:8@16:24Q32`).
+        // Same parameters and C convention; only the encoding format differs.
+        if encoding.hasPrefix("v40@0:8"), encoding.hasSuffix("Q32") {
+            return true
+        }
+        return false
+    }
+
     /// A namespace for control item lengths.
     private enum Lengths {
         static let standard: CGFloat = NSStatusItem.variableLength
@@ -146,12 +162,11 @@ final class ControlItem: NSObject {
                 return false
             }
             let encoding = String(cString: encodingPointer)
-            guard encoding.hasPrefix("v@:@:"), encoding.hasSuffix("Q") else {
+            guard ControlItem.isSupportedAddTargetTypeEncoding(encoding) else {
                 Self.primaryActionDiagLog.warning(
                     """
-                    addTarget:action:forControlEvents: signature (\(encoding)) no longer matches \
-                    the assumed (void, id, SEL, id, SEL, NSUInteger) C convention; \
-                    falling back to target/action.
+                    addTarget:action:forControlEvents: signature (\(encoding)) is not a known \
+                    (void, id, SEL, id, SEL, NSUInteger) encoding; falling back to target/action.
                     """
                 )
                 return false
