@@ -95,6 +95,8 @@ final class ControlItem: NSObject {
 
     /// Storage for a control item's underlying status item.
     private final class StatusItemStorage {
+        private static let primaryActionDiagLog = DiagLog(category: "ControlItem.PrimaryAction")
+
         /// The Objective-C selector for AppKit's control-event target API.
         ///
         /// Xcode 26's SDK does not declare this API, even though macOS 27 uses
@@ -138,12 +140,20 @@ final class ControlItem: NSObject {
                 let method = class_getInstanceMethod(type(of: button), selector),
                 let encodingPointer = method_getTypeEncoding(method)
             else {
-                assertionFailure("addTarget:action:forControlEvents: has no resolvable type encoding; refusing to bind the primary action.")
+                Self.primaryActionDiagLog.warning(
+                    "addTarget:action:forControlEvents: has no resolvable type encoding; falling back to target/action."
+                )
                 return false
             }
             let encoding = String(cString: encodingPointer)
             guard encoding.hasPrefix("v@:@:"), encoding.hasSuffix("Q") else {
-                assertionFailure("addTarget:action:forControlEvents: signature (\(encoding)) no longer matches the assumed (void, id, SEL, id, SEL, NSUInteger) C convention; refusing to bind the primary action.")
+                Self.primaryActionDiagLog.warning(
+                    """
+                    addTarget:action:forControlEvents: signature (\(encoding)) no longer matches \
+                    the assumed (void, id, SEL, id, SEL, NSUInteger) C convention; \
+                    falling back to target/action.
+                    """
+                )
                 return false
             }
 
@@ -254,8 +264,18 @@ final class ControlItem: NSObject {
     /// The control item's identifier.
     let identifier: Identifier
 
-    /// Lazy storage for the control item's underlying status item.
-    private lazy var storage = StatusItemStorage(controlItem: self)
+    /// Backing storage for the control item's underlying status item, created on
+    /// first use. Nil until something touches the status item.
+    private var _storage: StatusItemStorage?
+
+    private var storage: StatusItemStorage {
+        if let _storage {
+            return _storage
+        }
+        let created = StatusItemStorage(controlItem: self)
+        _storage = created
+        return created
+    }
 
     /// Spacer items used to extend hidden/always-hidden width on ultra-wide displays.
     private var spacerItems = [NSStatusItem]()
@@ -770,6 +790,12 @@ final class ControlItem: NSObject {
     /// cleanly. The preferred position is preserved by `removeFromMenuBar()`.
     func tearDownForTermination() {
         removeSpacerItems()
+        // Never materialize status-item storage during quit for control items that
+        // were never shown — init would register macOS 27 primary-action handlers
+        // we no longer need and can trap in debug when AppKit's encoding drifts.
+        guard _storage != nil else {
+            return
+        }
         removeFromMenuBar()
     }
 
