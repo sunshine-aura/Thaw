@@ -33,3 +33,39 @@ enum ControlItemEnforcementStrategy: Equatable {
     /// divider when their geometry is inverted.
     case legacyDividerSwap
 }
+
+/// How "reset layout to fresh state" is realized on this OS.
+enum LayoutResetStrategy: Equatable {
+    /// macOS 27: sweep every hideable item into Hidden via the assignment model
+    /// (items aren't position-movable, dividers aren't real).
+    case assignmentSweep
+    /// Legacy: clear persisted state and physically move items to the Hidden
+    /// section behind the section dividers.
+    case legacyMoveToHidden
+}
+
+enum PreferredMovePath: Equatable {
+    case legacyWindowServer
+    case preferredPositionsThenCommandDrag
+}
+
+enum SectionResetTarget: Equatable {
+    case freshInstallHidden
+    case allVisible
+    case allAlwaysHidden
+}
+
+enum LayoutResetExecution: Equatable {
+    case assignmentSweep(MenuBarSection.Name?)
+    case legacyPhysicalMoves(MenuBarItemManager.LayoutResetDirection)
+}
+
+enum ProfileLayoutStrategy: Equatable {
+    case legacyBulkMove
+    case assignmentApply
+}
+
+enum SavedLayoutRestoreStrategy: Equatable {
+    case spatialBulkApply
+    case visibleControlOrderOnly
+}

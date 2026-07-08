@@ -84,6 +84,27 @@ protocol MenuBarBackend: Sendable {
 
     /// Which section-divider enforcement model applies on this OS.
     nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy { get }
+
+    /// How "reset layout to fresh state" is realized on this OS.
+    nonisolated var layoutResetStrategy: LayoutResetStrategy { get }
+
+    nonisolated var preferredMovePath: PreferredMovePath { get }
+
+    nonisolated func allowsSectionBoundaryDividerTarget(allowExplicitOptIn: Bool) -> Bool
+
+    nonisolated func resetExecution(for target: SectionResetTarget) -> LayoutResetExecution
+
+    nonisolated func itemCacheSignature(_ items: [MenuBarItem]) -> [String]?
+
+    nonisolated var profileLayoutStrategy: ProfileLayoutStrategy { get }
+
+    nonisolated var savedLayoutRestoreStrategy: SavedLayoutRestoreStrategy { get }
+
+    nonisolated var classifiesSectionByDividerGeometry: Bool { get }
+
+    nonisolated var shouldCoalesceCacheRerun: Bool { get }
+
+    nonisolated var usesProfileWindowIDRelaunchHeuristic: Bool { get }
 }
 
 struct LegacyMenuBarBackend: MenuBarBackend {
@@ -199,6 +220,51 @@ struct LegacyMenuBarBackend: MenuBarBackend {
     nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy {
         .legacyDividerSwap
     }
+
+    nonisolated var layoutResetStrategy: LayoutResetStrategy {
+        .legacyMoveToHidden
+    }
+
+    nonisolated var preferredMovePath: PreferredMovePath {
+        .legacyWindowServer
+    }
+
+    nonisolated func allowsSectionBoundaryDividerTarget(allowExplicitOptIn _: Bool) -> Bool {
+        true
+    }
+
+    nonisolated func resetExecution(for target: SectionResetTarget) -> LayoutResetExecution {
+        switch target {
+        case .freshInstallHidden:
+            .legacyPhysicalMoves(.toHidden)
+        case .allVisible, .allAlwaysHidden:
+            .legacyPhysicalMoves(.toVisible)
+        }
+    }
+
+    nonisolated func itemCacheSignature(_: [MenuBarItem]) -> [String]? {
+        nil
+    }
+
+    nonisolated var profileLayoutStrategy: ProfileLayoutStrategy {
+        .legacyBulkMove
+    }
+
+    nonisolated var savedLayoutRestoreStrategy: SavedLayoutRestoreStrategy {
+        .spatialBulkApply
+    }
+
+    nonisolated var classifiesSectionByDividerGeometry: Bool {
+        true
+    }
+
+    nonisolated var shouldCoalesceCacheRerun: Bool {
+        false
+    }
+
+    nonisolated var usesProfileWindowIDRelaunchHeuristic: Bool {
+        true
+    }
 }
 
 struct AssertionMenuBarBackend: MenuBarBackend {
@@ -311,6 +377,54 @@ struct AssertionMenuBarBackend: MenuBarBackend {
 
     nonisolated var controlItemEnforcementStrategy: ControlItemEnforcementStrategy {
         .assertionDividerReorder
+    }
+
+    nonisolated var layoutResetStrategy: LayoutResetStrategy {
+        .assignmentSweep
+    }
+
+    nonisolated var preferredMovePath: PreferredMovePath {
+        .preferredPositionsThenCommandDrag
+    }
+
+    nonisolated func allowsSectionBoundaryDividerTarget(allowExplicitOptIn: Bool) -> Bool {
+        allowExplicitOptIn
+    }
+
+    nonisolated func resetExecution(for target: SectionResetTarget) -> LayoutResetExecution {
+        switch target {
+        case .freshInstallHidden:
+            .assignmentSweep(.hidden)
+        case .allVisible:
+            .assignmentSweep(nil)
+        case .allAlwaysHidden:
+            .assignmentSweep(.alwaysHidden)
+        }
+    }
+
+    nonisolated func itemCacheSignature(_ items: [MenuBarItem]) -> [String]? {
+        MenuBarItem.sortByVisualCenterThenIdentifier(items.filter { !$0.isSystemClone })
+            .map(\.uniqueIdentifier)
+    }
+
+    nonisolated var profileLayoutStrategy: ProfileLayoutStrategy {
+        .assignmentApply
+    }
+
+    nonisolated var savedLayoutRestoreStrategy: SavedLayoutRestoreStrategy {
+        .visibleControlOrderOnly
+    }
+
+    nonisolated var classifiesSectionByDividerGeometry: Bool {
+        false
+    }
+
+    nonisolated var shouldCoalesceCacheRerun: Bool {
+        true
+    }
+
+    nonisolated var usesProfileWindowIDRelaunchHeuristic: Bool {
+        false
     }
 }
 

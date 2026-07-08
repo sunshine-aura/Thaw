@@ -1255,25 +1255,6 @@ final class MacOS27LayoutAnchorOrderingTests: XCTestCase {
     }
 
     @MainActor
-    func testMacOS27CacheSignatureDetectsGeometryReorder() throws {
-        guard #available(macOS 27, *) else {
-            throw XCTSkip("macOS 27 AX ordering is OS-specific")
-        }
-
-        let alphaLeft = appItem(bundleID: "com.example.alpha", title: "Alpha", x: 100, windowID: 1510)
-        let betaRight = appItem(bundleID: "com.example.beta", title: "Beta", x: 140, windowID: 1511)
-        let alphaRight = appItem(bundleID: "com.example.alpha", title: "Alpha", x: 140, windowID: 1510)
-        let betaLeft = appItem(bundleID: "com.example.beta", title: "Beta", x: 100, windowID: 1511)
-
-        let original = MenuBarItemManager.macOS27ItemSignature([alphaLeft, betaRight])
-        let sameGeometryShuffled = MenuBarItemManager.macOS27ItemSignature([betaRight, alphaLeft])
-        let reordered = MenuBarItemManager.macOS27ItemSignature([alphaRight, betaLeft])
-
-        XCTAssertEqual(original, sameGeometryShuffled)
-        XCTAssertNotEqual(original, reordered)
-    }
-
-    @MainActor
     func testMacOS27VisibleThawControlGetsAchievableReorderDestination() throws {
         guard #available(macOS 27, *) else {
             throw XCTSkip("macOS 27 layout dragging is OS-specific")

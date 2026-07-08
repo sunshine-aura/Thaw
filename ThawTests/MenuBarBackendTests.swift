@@ -203,6 +203,63 @@ final class MenuBarBackendTests: XCTestCase {
         XCTAssertEqual(assertion.controlItemEnforcementStrategy, .assertionDividerReorder)
     }
 
+    func testLayoutResetStrategyPerBackend() {
+        XCTAssertEqual(legacy.layoutResetStrategy, .legacyMoveToHidden)
+        XCTAssertEqual(assertion.layoutResetStrategy, .assignmentSweep)
+    }
+
+    func testMovePathAndDividerTargetPolicyPerBackend() {
+        XCTAssertEqual(legacy.preferredMovePath, .legacyWindowServer)
+        XCTAssertTrue(legacy.allowsSectionBoundaryDividerTarget(allowExplicitOptIn: false))
+        XCTAssertTrue(legacy.allowsSectionBoundaryDividerTarget(allowExplicitOptIn: true))
+
+        XCTAssertEqual(assertion.preferredMovePath, .preferredPositionsThenCommandDrag)
+        XCTAssertFalse(assertion.allowsSectionBoundaryDividerTarget(allowExplicitOptIn: false))
+        XCTAssertTrue(assertion.allowsSectionBoundaryDividerTarget(allowExplicitOptIn: true))
+    }
+
+    func testResetExecutionMatrixPerBackend() {
+        XCTAssertEqual(legacy.resetExecution(for: .freshInstallHidden), .legacyPhysicalMoves(.toHidden))
+        XCTAssertEqual(legacy.resetExecution(for: .allVisible), .legacyPhysicalMoves(.toVisible))
+        XCTAssertEqual(legacy.resetExecution(for: .allAlwaysHidden), .legacyPhysicalMoves(.toVisible))
+
+        XCTAssertEqual(assertion.resetExecution(for: .freshInstallHidden), .assignmentSweep(.hidden))
+        XCTAssertEqual(assertion.resetExecution(for: .allVisible), .assignmentSweep(nil))
+        XCTAssertEqual(assertion.resetExecution(for: .allAlwaysHidden), .assignmentSweep(.alwaysHidden))
+    }
+
+    func testItemCacheSignaturePerBackend() {
+        let alphaLeft = item("Alpha", bundleID: "com.example.alpha", x: 100, windowID: 1510)
+        let betaRight = item("Beta", bundleID: "com.example.beta", x: 140, windowID: 1511)
+        let alphaRight = item("Alpha", bundleID: "com.example.alpha", x: 140, windowID: 1510)
+        let betaLeft = item("Beta", bundleID: "com.example.beta", x: 100, windowID: 1511)
+
+        XCTAssertNil(legacy.itemCacheSignature([alphaLeft, betaRight]))
+
+        let original = assertion.itemCacheSignature([alphaLeft, betaRight])
+        let sameGeometryShuffled = assertion.itemCacheSignature([betaRight, alphaLeft])
+        let reordered = assertion.itemCacheSignature([alphaRight, betaLeft])
+
+        XCTAssertEqual(original, sameGeometryShuffled)
+        XCTAssertNotEqual(original, reordered)
+    }
+
+    func testLayoutStrategiesPerBackend() {
+        XCTAssertEqual(legacy.profileLayoutStrategy, .legacyBulkMove)
+        XCTAssertEqual(assertion.profileLayoutStrategy, .assignmentApply)
+        XCTAssertEqual(legacy.savedLayoutRestoreStrategy, .spatialBulkApply)
+        XCTAssertEqual(assertion.savedLayoutRestoreStrategy, .visibleControlOrderOnly)
+    }
+
+    func testHeuristicFlagsPerBackend() {
+        XCTAssertTrue(legacy.classifiesSectionByDividerGeometry)
+        XCTAssertFalse(assertion.classifiesSectionByDividerGeometry)
+        XCTAssertFalse(legacy.shouldCoalesceCacheRerun)
+        XCTAssertTrue(assertion.shouldCoalesceCacheRerun)
+        XCTAssertTrue(legacy.usesProfileWindowIDRelaunchHeuristic)
+        XCTAssertFalse(assertion.usesProfileWindowIDRelaunchHeuristic)
+    }
+
     // MARK: - persistLayoutSnapshot
 
     func testPersistLayoutSnapshotActionPerBackend() {
@@ -229,6 +286,19 @@ final class MenuBarBackendTests: XCTestCase {
                 controlItems: controlItems,
                 hider: nil
             )
+        )
+    }
+
+    private func item(
+        _ title: String,
+        bundleID: String,
+        x: CGFloat,
+        windowID: CGWindowID
+    ) -> MenuBarItem {
+        MenuBarItem.fixture(
+            tag: .appItem(bundleID: bundleID, title: title),
+            windowID: windowID,
+            bounds: CGRect(x: x, y: 0, width: 24, height: 22)
         )
     }
 }

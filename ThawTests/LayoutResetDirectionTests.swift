@@ -12,8 +12,7 @@ import XCTest
 final class LayoutResetDirectionTests: XCTestCase {
     func testTowardHiddenTreatsVisibleAndAlwaysHiddenItemsAsNotYetInTarget() {
         let item = MenuBarItem.fixture(tag: .appItem(bundleID: "com.example.app", title: "Item"), windowID: 10)
-        let hidden = MenuBarItem.fixture(tag: .hiddenControlItem, windowID: 1)
-        let direction = MenuBarItemManager.LayoutResetDirection.towardHidden(anchor: hidden)
+        let direction = MenuBarItemManager.LayoutResetDirection.toHidden
         let hiddenBounds = CGRect(x: 100, y: 0, width: 20, height: 22)
         let alwaysHiddenBounds = CGRect(x: 40, y: 0, width: 20, height: 22)
 
@@ -45,8 +44,7 @@ final class LayoutResetDirectionTests: XCTestCase {
 
     func testTowardVisibleTreatsItemsLeftOfHiddenDividerAsNotYetInTarget() {
         let item = MenuBarItem.fixture(tag: .appItem(bundleID: "com.example.app", title: "Item"), windowID: 10)
-        let hidden = MenuBarItem.fixture(tag: .hiddenControlItem, windowID: 1)
-        let direction = MenuBarItemManager.LayoutResetDirection.towardVisible(hiddenDivider: hidden)
+        let direction = MenuBarItemManager.LayoutResetDirection.toVisible
         let hiddenBounds = CGRect(x: 100, y: 0, width: 20, height: 22)
 
         XCTAssertTrue(

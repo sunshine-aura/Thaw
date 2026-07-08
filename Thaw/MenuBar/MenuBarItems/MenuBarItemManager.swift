@@ -120,7 +120,7 @@ final class MenuBarItemManager: ObservableObject {
 
     /// Minimum time cold-boot settling waits before declaring the bar stable.
     private static var startupMinimumSettlingDuration: Duration {
-        if #available(macOS 27, *) {
+        if MenuBarBackendFactory.current.preferredMovePath == .preferredPositionsThenCommandDrag {
             Constants.MenuBarTuning.startupMenuBarHostSettleDelay
         } else {
             Constants.MenuBarTuning.startupInitialScanDelay
@@ -134,7 +134,7 @@ final class MenuBarItemManager: ObservableObject {
 
     /// Retry interval when Thaw's control items are not yet visible.
     private static var startupControlItemRetryDelay: Duration {
-        if #available(macOS 27, *) {
+        if MenuBarBackendFactory.current.preferredMovePath == .preferredPositionsThenCommandDrag {
             Constants.MenuBarTuning.startupMenuBarHostSettleDelay
         } else {
             Constants.MenuBarTuning.startupInitialScanDelay
@@ -658,7 +658,7 @@ final class MenuBarItemManager: ObservableObject {
                 "post-restriction repair: unparking \(parkedVisible.count) off-band item(s) " +
                     "using anchor \(anchor.logString)"
             )
-            for item in parkedVisible.sorted(by: { $0.bounds.midX < $1.bounds.midX }) {
+            for item in MenuBarItem.sortByVisualCenter(parkedVisible) {
                 let freshItems = await MenuBarItem.getMenuBarItems(option: .activeSpace)
                 guard let currentAnchor = unparkAnchorAmong(liveItems: freshItems, hider: hider) else {
                     break
@@ -1795,22 +1795,6 @@ final class MenuBarItemManager: ObservableObject {
 // MARK: - Cache Gate
 
 extension MenuBarItemManager {
-    /// Stable macOS 27 cache signature in live visual order. AX enumeration can
-    /// arrive in arbitrary array order, so geometry determines order and the
-    /// identifier breaks ties. Unlike an alphabetically sorted identity set,
-    /// this changes when the user Command-drags existing items in the menu bar.
-    static func macOS27ItemSignature(_ items: [MenuBarItem]) -> [String] {
-        items
-            .filter { !$0.isSystemClone }
-            .sorted { lhs, rhs in
-                if lhs.bounds.midX == rhs.bounds.midX {
-                    return lhs.uniqueIdentifier < rhs.uniqueIdentifier
-                }
-                return lhs.bounds.midX < rhs.bounds.midX
-            }
-            .map(\.uniqueIdentifier)
-    }
-
     /// Serializes cache operations to prevent races between concurrent
     /// `cacheItemsRegardless` calls. When a relocation move is in flight,
     /// a concurrent call could snapshot item positions before the move
@@ -2124,7 +2108,7 @@ extension MenuBarItemManager {
             // dividers stay collapsed, and assignment-backed hiding rebuckets
             // items later via SimpleItemHider. Treat live managed items as
             // visible at this legacy geometry layer.
-            guard MenuBarBackendFactory.current.supportsLegacySectionHiding else {
+            guard MenuBarBackendFactory.current.classifiesSectionByDividerGeometry else {
                 return .visible
             }
 
@@ -2446,7 +2430,7 @@ extension MenuBarItemManager {
                 // run one more pass so the layout bars reflect the latest section
                 // assignment. (≤26 keeps its drop-and-forget behavior to avoid
                 // snapshotting positions mid-relocation.)
-                if needsRerun, !MenuBarBackendFactory.current.supportsLegacySectionHiding {
+                if needsRerun, MenuBarBackendFactory.current.shouldCoalesceCacheRerun {
                     await self.cacheItemsRegardless(skipRecentMoveCheck: true)
                 }
             }
@@ -2598,11 +2582,11 @@ extension MenuBarItemManager {
         }
         cacheActor.updateCachedItemWindowIDs(itemWindowIDs)
         cacheActor.updateCachedCloneWindowIDs(cloneWindowIDs)
-        if #available(macOS 27, *) {
-            // Keep the stable-identity signature in sync with every recache so
-            // cacheItemsIfNeeded's macOS 27 gate doesn't immediately re-fire
-            // after a recache triggered by some other path (app launch, etc.).
-            cacheActor.updateCachedItemSignature(Self.macOS27ItemSignature(items))
+        if let signature = MenuBarBackendFactory.current.itemCacheSignature(items) {
+            // Keep stable-identity signature in sync every recache so
+            // cacheItemsIfNeeded does not immediately re-fire after a recache
+            // triggered by another path (app launch, etc.).
+            cacheActor.updateCachedItemSignature(signature)
         }
 
         await MainActor.run {
@@ -2745,7 +2729,7 @@ extension MenuBarItemManager {
         // alone, which re-arms scheduleProfileResort every tick and retries
         // the same impossible move forever — a perpetual synthetic
         // Command-drag storm that warps/hides the cursor system-wide.
-        if MenuBarBackendFactory.current.supportsLegacySectionHiding,
+        if MenuBarBackendFactory.current.usesProfileWindowIDRelaunchHeuristic,
            let activeLayout = activeProfileLayout,
            !activeProfileItemIdentifiers.isEmpty,
            !previousWindowIDs.isEmpty
@@ -2942,16 +2926,11 @@ extension MenuBarItemManager {
     /// the hidden and always-hidden sections are correctly ordered,
     /// arranging them into valid positions if needed.
     func cacheItemsIfNeeded() async {
-        if #available(macOS 27, *) {
-            // macOS 27 re-composites the menu bar items inside MenuBarAgent, so
-            // their AX-derived windowIDs change on every enumeration even when
-            // nothing moved. Comparing windowIDs (as the legacy path does) would
-            // then read as a layout change on every tick and recache in a tight
-            // loop — the feedback storm that makes the UI glitch. Gate the
-            // recache on a stable identity signature (owner + title, clones
-            // excluded) instead, so it fires only on a real add/remove/reorder.
-            let items = await MenuBarItem.getMenuBarItems(option: .activeSpace)
-            let signature = Self.macOS27ItemSignature(items)
+        let backend = MenuBarBackendFactory.current
+        let items = await MenuBarItem.getMenuBarItems(option: .activeSpace)
+        if let signature = backend.itemCacheSignature(items) {
+            // Assertion-backed menu bar items use synthetic window IDs, so
+            // compare stable visual-order identity instead of WindowServer IDs.
             let cachedSignature = cacheActor.cachedItemSignature
             if cachedSignature != signature {
                 MenuBarItemManager.diagLog.debug("cacheItemsIfNeeded: item identities changed (\(cachedSignature.count) cached vs \(signature.count) current), triggering recache")
@@ -3655,15 +3634,15 @@ extension MenuBarItemManager {
         }
     }
 
-    enum LayoutResetDirection {
-        case towardHidden(anchor: MenuBarItem)
-        case towardVisible(hiddenDivider: MenuBarItem)
+    enum LayoutResetDirection: Equatable {
+        case toHidden
+        case toVisible
 
         func moveDestination(controlItems: ControlItemPair) -> MoveDestination {
             switch self {
-            case .towardHidden:
+            case .toHidden:
                 .leftOfItem(controlItems.hidden)
-            case .towardVisible:
+            case .toVisible:
                 .rightOfItem(controlItems.hidden)
             }
         }
@@ -3675,7 +3654,7 @@ extension MenuBarItemManager {
             alwaysHiddenBounds: CGRect?
         ) -> Bool {
             switch self {
-            case .towardHidden:
+            case .toHidden:
                 if bounds.minX >= hiddenBounds.maxX {
                     return true
                 }
@@ -3683,43 +3662,43 @@ extension MenuBarItemManager {
                     return true
                 }
                 return false
-            case .towardVisible:
+            case .toVisible:
                 return bounds.minX < hiddenBounds.maxX
             }
         }
 
         var movesAllCandidatesInFirstPass: Bool {
             switch self {
-            case .towardHidden:
+            case .toHidden:
                 true
-            case .towardVisible:
+            case .toVisible:
                 false
             }
         }
 
         var failureLogLabel: String {
             switch self {
-            case .towardHidden:
+            case .toHidden:
                 "layout reset"
-            case .towardVisible:
+            case .toVisible:
                 "reset-to-visible"
             }
         }
 
         var secondPassLogLabel: String {
             switch self {
-            case .towardHidden:
+            case .toHidden:
                 "Layout reset"
-            case .towardVisible:
+            case .toVisible:
                 "Reset-to-visible"
             }
         }
 
         var resetsNewLeftmostRelocationSuppression: Bool {
             switch self {
-            case .towardHidden:
+            case .toHidden:
                 true
-            case .towardVisible:
+            case .toVisible:
                 false
             }
         }
@@ -4163,7 +4142,8 @@ extension MenuBarItemManager {
         // over-wide reflow, which no longer works on macOS 27. The explicit
         // section-transition path opts in because it uses the divider as a
         // normal, visible Command-drag anchor before updating the assertion.
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
+        let backend = MenuBarBackendFactory.current
+        if !backend.allowsSectionBoundaryDividerTarget(allowExplicitOptIn: allowSectionBoundaryTargetOnMacOS27) {
             let target = destination.targetItem
             if target.isControlItem,
                target.tag != .visibleControlItem,
@@ -4238,15 +4218,18 @@ extension MenuBarItemManager {
         // cursor, so return before the cursor-hide/warp block below. Anything it
         // cannot express (unresolved key, no numeric gap, end placement) falls
         // through to the synthetic ⌘-drag, which keeps full coverage.
-        if #available(macOS 27, *),
-           !skipPreferredPositionMove,
-           await moveItemViaPreferredPositions(
-               item: item,
-               to: destination,
-               experimentalSystemItemHiding: experimentalSystemItemHiding
-           )
-        {
-            return
+        if backend.preferredMovePath == .preferredPositionsThenCommandDrag {
+            if #available(macOS 27, *) {
+                if !skipPreferredPositionMove,
+                   await moveItemViaPreferredPositions(
+                       item: item,
+                       to: destination,
+                       experimentalSystemItemHiding: experimentalSystemItemHiding
+                   )
+                {
+                    return
+                }
+            }
         }
 
         // Capture the original cursor position once so the cursor is warped
@@ -4274,16 +4257,18 @@ extension MenuBarItemManager {
         // are inert. The system still honors a location-based ⌘-drag to reorder
         // items (verified by reverse-engineering), so delegate to that gesture.
         // The cursor hide/warp-back defer registered above wraps this call.
-        if #available(macOS 27, *) {
-            try await MoveInputSuppression.withUserMouseInputSuppressed {
-                try await moveItemViaCommandDrag(
-                    item: item,
-                    to: destination,
-                    on: resolvedDisplayID,
-                    experimentalSystemItemHiding: experimentalSystemItemHiding
-                )
+        if backend.preferredMovePath == .preferredPositionsThenCommandDrag {
+            if #available(macOS 27, *) {
+                try await MoveInputSuppression.withUserMouseInputSuppressed {
+                    try await moveItemViaCommandDrag(
+                        item: item,
+                        to: destination,
+                        on: resolvedDisplayID,
+                        experimentalSystemItemHiding: experimentalSystemItemHiding
+                    )
+                }
+                return
             }
-            return
         }
 
         // Tracks whether any postMoveEvents attempt produced observable
@@ -6848,16 +6833,29 @@ extension MenuBarItemManager {
     /// - Returns: The number of items that failed to move.
     func resetLayoutToFreshState() async throws -> Int {
         MenuBarItemManager.diagLog.info("Resetting menu bar layout to fresh state")
+        return try await executeReset(for: .freshInstallHidden)
+    }
 
-        // macOS 27: layout is an assignment model owned by SimpleItemHider, not a
-        // position-based one — the legacy control-item move path below can't run
-        // (items aren't movable, dividers aren't real). Reset by sweeping every
-        // hideable item into the Hidden section via the assignment model, which
-        // matches the documented "fresh install" behavior.
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
-            return await resetLayoutMacOS27()
+    private func executeReset(for target: SectionResetTarget) async throws -> Int {
+        switch MenuBarBackendFactory.current.resetExecution(for: target) {
+        case let .assignmentSweep(section):
+            if let section {
+                return await resetLayoutMacOS27(to: section)
+            }
+            return await resetLayoutToVisibleMacOS27()
+        case .legacyPhysicalMoves:
+            switch target {
+            case .freshInstallHidden:
+                return try await resetLayoutToFreshStateLegacy()
+            case .allVisible:
+                return try await resetLayoutToVisibleLegacy()
+            case .allAlwaysHidden:
+                return try await resetLayoutToAlwaysHiddenLegacy()
+            }
         }
+    }
 
+    private func resetLayoutToFreshStateLegacy() async throws -> Int {
         // A user-initiated reset is authoritative: end the startup settling period
         // immediately so that the post-reset cache is not blocked from running restore
         // and saveSectionOrder by an in-flight settling task.
@@ -6953,6 +6951,18 @@ extension MenuBarItemManager {
     }
 
     private func resetLayoutWithControlItems(controlItems: ControlItemPair, items: [MenuBarItem]) async throws -> Int {
+        try await resetLayoutWithControlItems(
+            controlItems: controlItems,
+            items: items,
+            direction: .toHidden
+        )
+    }
+
+    private func resetLayoutWithControlItems(
+        controlItems: ControlItemPair,
+        items: [MenuBarItem],
+        direction: LayoutResetDirection
+    ) async throws -> Int {
         guard let appState else {
             throw LayoutResetError.missingAppState
         }
@@ -6964,18 +6974,6 @@ extension MenuBarItemManager {
             appState.hidEventManager.startAll()
         }
 
-        try await resetLayoutWithControlItems(
-            controlItems: controlItems,
-            items: items,
-            direction: .towardHidden(anchor: controlItems.hidden)
-        )
-    }
-
-    private func resetLayoutWithControlItems(
-        controlItems: ControlItemPair,
-        items: [MenuBarItem],
-        direction: LayoutResetDirection
-    ) async throws -> Int {
         func controlBounds(for controlItems: ControlItemPair) -> (hidden: CGRect, alwaysHidden: CGRect?) {
             let hiddenBounds = Bridging.getWindowBounds(for: controlItems.hidden.windowID)
                 ?? controlItems.hidden.bounds
@@ -7084,9 +7082,9 @@ extension MenuBarItemManager {
                 return false
             }
             let notYetInTarget: [MenuBarItem] = switch direction {
-            case .towardHidden:
+            case .toHidden:
                 notYetInHidden
-            case .towardVisible:
+            case .toVisible:
                 itemsNotInTarget(refreshedItems, controlItems: refreshedControls)
             }
             if !notYetInTarget.isEmpty {
@@ -7180,14 +7178,13 @@ extension MenuBarItemManager {
     /// - Returns: The number of items that failed to move.
     func resetLayoutToAlwaysHidden() async throws -> Int {
         MenuBarItemManager.diagLog.info("Resetting menu bar layout to always-hidden")
+        return try await executeReset(for: .allAlwaysHidden)
+    }
 
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
-            return await resetLayoutMacOS27(to: .alwaysHidden)
-        }
-
+    private func resetLayoutToAlwaysHiddenLegacy() async throws -> Int {
         // Legacy path: treat the same as reset-to-visible but then
         // assign to alwaysHidden via SimpleItemHider.
-        let failed = try await resetLayoutToVisible()
+        let failed = try await resetLayoutToVisibleLegacy()
         guard let appState, let hider = appState.menuBarManager.simpleItemHider else {
             return failed
         }
@@ -7215,11 +7212,10 @@ extension MenuBarItemManager {
     /// - Returns: The number of items that failed to move.
     func resetLayoutToVisible() async throws -> Int {
         MenuBarItemManager.diagLog.info("Resetting menu bar layout to visible")
+        return try await executeReset(for: .allVisible)
+    }
 
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
-            return await resetLayoutToVisibleMacOS27()
-        }
-
+    private func resetLayoutToVisibleLegacy() async throws -> Int {
         startupSettlingTask?.cancel()
         isInStartupSettling = false
         settlingDeadline = nil
@@ -7266,7 +7262,7 @@ extension MenuBarItemManager {
         try await resetLayoutWithControlItems(
             controlItems: controlItems,
             items: items,
-            direction: .towardVisible(hiddenDivider: controlItems.hidden)
+            direction: .toVisible
         )
     }
 
@@ -7621,7 +7617,8 @@ extension MenuBarItemManager {
         // macOS 27: layout is assignment-backed, not position-based. The legacy
         // bulk-move pipeline below cannot establish section membership on
         // MenuBarAgent-hosted items.
-        if !MenuBarBackendFactory.current.supportsLegacySectionHiding {
+        switch MenuBarBackendFactory.current.profileLayoutStrategy {
+        case .assignmentApply:
             await applyProfileLayoutMacOS27(
                 appState: appState,
                 itemSectionMap: itemSectionMap,
@@ -7629,6 +7626,8 @@ extension MenuBarItemManager {
                 source: source
             )
             return
+        case .legacyBulkMove:
+            break
         }
 
         // MARK: Phase 2: discover items, classify sections, build sequences
@@ -8586,8 +8585,11 @@ extension MenuBarItemManager {
         // section reorders after assertion reflow (items left of the hidden
         // control are still visible-assigned), which collided with volatile
         // neighbours like iStat and stranded them off the bar.
-        guard MenuBarBackendFactory.current.supportsLegacySectionHiding else {
+        switch MenuBarBackendFactory.current.savedLayoutRestoreStrategy {
+        case .visibleControlOrderOnly:
             return await restoreMacOS27VisibleControlOrder(items: items)
+        case .spatialBulkApply:
+            break
         }
 
         // Trigger detection. The cache cycle calls this on every tick;
