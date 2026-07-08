@@ -17,6 +17,7 @@
 # Usage:
 #   ./scripts/thaw-devrun.sh
 #   ./scripts/thaw-devrun.sh --team A7CKWF99ML
+#   ./scripts/thaw-devrun.sh --skip-packages
 #   THAW_DEVELOPMENT_TEAM=A7CKWF99ML ./scripts/thaw-devrun.sh
 #
 set -euo pipefail
@@ -31,12 +32,17 @@ CONFIG="Debug"
 DEST="/Applications/Thaw Debug.app"
 DEBUG_BUNDLE_ID="com.stonerl.Thaw.debug"
 
+SKIP_PACKAGES=0
 TEAM_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --team)
             TEAM_OVERRIDE="${2:?--team requires a team id}"
             shift 2
+            ;;
+        --skip-packages)
+            SKIP_PACKAGES=1
+            shift
             ;;
         -h | --help)
             sed -n '1,22p' "$0" | tail -n +2
@@ -65,6 +71,17 @@ else
     echo >&2
     signing_setup_hint >&2
     exit 1
+fi
+
+resolve_swift_packages() {
+    say "Resolving Swift packages…"
+    xcodebuild -resolvePackageDependencies \
+        -project Thaw.xcodeproj \
+        -scheme "$SCHEME"
+}
+
+if [[ "$SKIP_PACKAGES" -eq 0 ]]; then
+    resolve_swift_packages
 fi
 
 # Quit every running 'Thaw Debug' process — the app AND its MenuBarItemService
