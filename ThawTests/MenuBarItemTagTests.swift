@@ -277,13 +277,23 @@ final class MenuBarItemTagTests: XCTestCase {
     }
 
     func testAppleStringNamespaceIsNonConcealableSystemItem() {
-        let spotlight = MenuBarItemTag(
-            namespace: .string("com.apple.campo"),
-            title: "Spotlight"
+        let siri = MenuBarItemTag(
+            namespace: .string("com.apple.systemuiserver"),
+            title: "Siri"
         )
 
-        XCTAssertFalse(spotlight.isSystemItem)
-        XCTAssertTrue(spotlight.isNonConcealableSystemItem)
+        XCTAssertTrue(siri.isSystemItem)
+        XCTAssertTrue(siri.isNonConcealableSystemItem)
+
+        // Any other `com.apple.*` owner AX reports as a plain string namespace
+        // is still non-concealable even when it is not a named system constant.
+        let unknownHost = MenuBarItemTag(
+            namespace: .string("com.apple.legacyhost"),
+            title: "Item-0"
+        )
+
+        XCTAssertFalse(unknownHost.isSystemItem)
+        XCTAssertTrue(unknownHost.isNonConcealableSystemItem)
     }
 
     func testMenuBarAgentItemIsNonConcealableSystemItem() {
@@ -531,14 +541,14 @@ final class MenuBarItemTagTests: XCTestCase {
             throw XCTSkip("Assertion-backed section policy is macOS 27-specific")
         }
 
-        let spotlight = MenuBarItemTag(namespace: .string("com.apple.campo"), title: "Spotlight")
+        let siri = MenuBarItemTag.siri
         let wifi = MenuBarItemTag(namespace: .menuBarAgent, title: "com.apple.menuextra.wifi")
         let weather = MenuBarItemTag(namespace: .menuBarAgent, title: "com.apple.menuextra.weather")
         let app = MenuBarItemTag.appItem(bundleID: "com.example.app", title: "Status")
 
-        XCTAssertEqual(spotlight.sectionManagementPolicy, .forcedVisible)
-        XCTAssertFalse(spotlight.canBeHidden)
-        XCTAssertTrue(spotlight.sectionManagementPolicy.isVisibleInLayout)
+        XCTAssertEqual(siri.sectionManagementPolicy, .forcedVisible)
+        XCTAssertFalse(siri.canBeHidden)
+        XCTAssertTrue(siri.sectionManagementPolicy.isVisibleInLayout)
 
         XCTAssertEqual(wifi.sectionManagementPolicy, .hideable)
         XCTAssertTrue(wifi.canBeHidden)
