@@ -1,4 +1,6 @@
 .build-benchmark
+.cursor
+.claude
 .codex-home
 .cursorrules
 .DS_Store  
