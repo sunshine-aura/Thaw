@@ -170,4 +170,10 @@ enum SystemMenuBarModuleCatalog {
         }
         return nil
     }
+
+    /// Canonical ``TrailingItemPreferredPositions`` key for a MenuBarAgent-hosted
+    /// Apple module (e.g. `module:WiFi`).
+    static func trailingPositionsModuleKey(forTitle title: String) -> String {
+        "module:\(title)"
+    }
 }

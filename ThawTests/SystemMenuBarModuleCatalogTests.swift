@@ -68,6 +68,13 @@ final class SystemMenuBarModuleCatalogTests: XCTestCase {
         XCTAssertNil(SystemMenuBarModuleCatalog.assessmentSystemItemID(forTitle: ""))
     }
 
+    func testTrailingPositionsModuleKeyUsesCanonicalPrefix() {
+        XCTAssertEqual(
+            SystemMenuBarModuleCatalog.trailingPositionsModuleKey(forTitle: "WiFi"),
+            "module:WiFi"
+        )
+    }
+
     func testEveryAssessmentIndexZeroThroughEightIsRepresentedOnce() {
         let ids = SystemMenuBarModuleCatalog.all.compactMap(\.assessmentSystemItemID).sorted()
         XCTAssertEqual(ids, Array(0 ... 8))

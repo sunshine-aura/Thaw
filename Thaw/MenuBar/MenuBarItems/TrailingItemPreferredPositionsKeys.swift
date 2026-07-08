@@ -92,7 +92,7 @@ enum TrailingItemPreferredPositionsKeys {
 
         // Apple modules hosted by MenuBarAgent.
         if item.tag.namespace.isMenuBarHostingNamespace {
-            let moduleKey = "module:\(title)"
+            let moduleKey = SystemMenuBarModuleCatalog.trailingPositionsModuleKey(forTitle: title)
             if existingKeys.contains(moduleKey) {
                 return moduleKey
             }
@@ -142,9 +142,9 @@ enum TrailingItemPreferredPositionsKeys {
         positions: [String: Int],
         liveItems: [MenuBarItem]
     ) -> String? {
-        let family = liveItems
-            .filter { !$0.isSystemClone && $0.tag.namespace == item.tag.namespace }
-            .sorted { $0.bounds.minX < $1.bounds.minX }
+        let family = MenuBarItem.sortByLeadingEdge(
+            liveItems.filter { !$0.isSystemClone && $0.tag.namespace == item.tag.namespace }
+        )
         guard
             family.count > 1,
             let itemIndex = family.firstIndex(where: { $0.tag.matchesIgnoringWindowID(item.tag) })
