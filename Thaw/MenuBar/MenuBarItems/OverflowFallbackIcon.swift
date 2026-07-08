@@ -28,14 +28,52 @@ enum OverflowFallbackIcon {
         .first?
         .icon
 
+    /// Whether concealed sections on macOS 27 may render app icons when live
+    /// captures are missing or unreliable.
+    @MainActor
+    static func supportsMissingCaptureFallback(for section: MenuBarSection.Name?) -> Bool {
+        guard #available(macOS 27, *) else { return false }
+        guard let section, section != .visible else { return false }
+        return true
+    }
+
     /// Whether concealed items in `section` should render the app-icon fallback
     /// instead of their captured glyph.
     @MainActor
     static func isActive(for section: MenuBarSection.Name?, appState: AppState) -> Bool {
-        guard #available(macOS 27, *) else { return false }
-        guard appState.settings.advanced.enableExperimentalOverflowPrevention else { return false }
-        guard let section, section != .visible else { return false }
-        return true
+        guard supportsMissingCaptureFallback(for: section) else { return false }
+        return appState.settings.advanced.enableExperimentalOverflowPrevention
+    }
+
+    /// Whether to prefer the app-icon fallback for a concealed item.
+    ///
+    /// The overflow-prevention toggle always prefers app icons (distorted native
+    /// overflow crops). Otherwise, fall back only when no captured glyph exists.
+    @MainActor
+    static func shouldPreferAppIcon(
+        for section: MenuBarSection.Name?,
+        appState: AppState,
+        cachedImage: NSImage?
+    ) -> Bool {
+        guard supportsMissingCaptureFallback(for: section) else { return false }
+        if appState.settings.advanced.enableExperimentalOverflowPrevention {
+            return true
+        }
+        return cachedImage == nil
+    }
+
+    /// The image Thaw Bar / layout UI should display for a concealed item.
+    @MainActor
+    static func resolvedImage(
+        for item: MenuBarItem,
+        section: MenuBarSection.Name?,
+        appState: AppState,
+        cachedImage: NSImage?
+    ) -> NSImage? {
+        if shouldPreferAppIcon(for: section, appState: appState, cachedImage: cachedImage) {
+            return image(for: item)
+        }
+        return cachedImage
     }
 
     /// The owning app's icon for `item`, falling back to a generic menu-bar

@@ -508,18 +508,18 @@ private struct IceBarContentView: View {
         }
     }
 
-    /// Interim: concealed items on macOS 27 native overflow can capture as
-    /// distorted glyphs; show the owning app's icon instead until the crop
-    /// geometry is fixed. See ``OverflowFallbackIcon``.
-    private var useOverflowFallback: Bool {
-        OverflowFallbackIcon.isActive(for: section, appState: appState)
+    private func image(for item: MenuBarItem) -> NSImage? {
+        OverflowFallbackIcon.resolvedImage(
+            for: item,
+            section: section,
+            appState: appState,
+            cachedImage: imageCache.image(for: item.tag)?.nsImage
+        )
     }
 
-    private func image(for item: MenuBarItem) -> NSImage? {
-        if useOverflowFallback {
-            return OverflowFallbackIcon.image(for: item)
-        }
-        return imageCache.image(for: item.tag)?.nsImage
+    /// Concealed sections can still render from app icons when captures fail.
+    private var canShowItemsWithoutCaptures: Bool {
+        OverflowFallbackIcon.supportsMissingCaptureFallback(for: section)
     }
 
     var body: some View {
@@ -642,7 +642,7 @@ private struct IceBarContentView: View {
             .onAppear {
                 Self.diagLog.warning("IceBar content: showing 'Loading menu bar items…' — itemCache.managedItems is EMPTY. This means the item cache has never been populated.")
             }
-        } else if imageCache.cacheFailed(for: section) {
+        } else if imageCache.cacheFailed(for: section), !canShowItemsWithoutCaptures {
             HStack {
                 if cacheGracePeriodActive {
                     Text("Loading menu bar items…")
@@ -674,7 +674,6 @@ private struct IceBarContentView: View {
                     HStack(spacing: itemSpacing) {
                         ForEach(items, id: \.windowID) { item in
                             IceBarItemView(
-                                imageCache: imageCache,
                                 itemManager: itemManager,
                                 menuBarManager: menuBarManager,
                                 item: item,
@@ -682,7 +681,7 @@ private struct IceBarContentView: View {
                                 displayID: screen.displayID,
                                 maxHeight: itemMaxHeight,
                                 tooltipDelay: appState.settings.advanced.tooltipDelay,
-                                useOverflowFallback: useOverflowFallback
+                                displayImage: image(for: item)
                             )
                         }
                     }
@@ -700,7 +699,6 @@ private struct IceBarContentView: View {
                     VStack(spacing: itemSpacing) {
                         ForEach(items, id: \.windowID) { item in
                             IceBarItemView(
-                                imageCache: imageCache,
                                 itemManager: itemManager,
                                 menuBarManager: menuBarManager,
                                 item: item,
@@ -708,7 +706,7 @@ private struct IceBarContentView: View {
                                 displayID: screen.displayID,
                                 maxHeight: itemMaxHeight,
                                 tooltipDelay: appState.settings.advanced.tooltipDelay,
-                                useOverflowFallback: useOverflowFallback
+                                displayImage: image(for: item)
                             )
                         }
                     }
@@ -728,7 +726,6 @@ private struct IceBarContentView: View {
                             HStack(spacing: itemSpacing) {
                                 ForEach(Array(rowItems.enumerated()), id: \.element.windowID) { colIndex, item in
                                     let itemView = IceBarItemView(
-                                        imageCache: imageCache,
                                         itemManager: itemManager,
                                         menuBarManager: menuBarManager,
                                         item: item,
@@ -736,7 +733,7 @@ private struct IceBarContentView: View {
                                         displayID: screen.displayID,
                                         maxHeight: itemMaxHeight,
                                         tooltipDelay: appState.settings.advanced.tooltipDelay,
-                                        useOverflowFallback: useOverflowFallback
+                                        displayImage: image(for: item)
                                     )
                                     if rows.count > 1 {
                                         itemView
@@ -772,7 +769,6 @@ private struct IceBarContentView: View {
 private struct IceBarItemView: View {
     private static let diagLog = DiagLog(category: "IceBar.ItemView")
 
-    @ObservedObject var imageCache: MenuBarItemImageCache
     @ObservedObject var itemManager: MenuBarItemManager
     @ObservedObject var menuBarManager: MenuBarManager
 
@@ -781,9 +777,7 @@ private struct IceBarItemView: View {
     let displayID: CGDirectDisplayID
     let maxHeight: CGFloat?
     let tooltipDelay: TimeInterval
-    /// See ``OverflowFallbackIcon`` — draw the app icon instead of the (possibly
-    /// distorted) captured glyph for concealed native-overflow items.
-    let useOverflowFallback: Bool
+    let displayImage: NSImage?
 
     private var leftClickAction: () -> Void {
         return { [weak itemManager, weak menuBarManager] in
@@ -863,10 +857,7 @@ private struct IceBarItemView: View {
     }
 
     private var image: NSImage? {
-        if useOverflowFallback {
-            return OverflowFallbackIcon.image(for: item)
-        }
-        return imageCache.image(for: item.tag)?.nsImage
+        displayImage
     }
 
     private func targetSize(for image: NSImage) -> CGSize {

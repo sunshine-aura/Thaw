@@ -202,9 +202,14 @@ final class LayoutBarItemView: LayoutBarArrangedView {
     }
 
     private var shouldPreferPlaceholderImage: Bool {
-        guard #available(macOS 27, *) else { return false }
-        guard appState?.settings.advanced.enableExperimentalOverflowPrevention == true else { return false }
-        return (superview as? LayoutBarContainer)?.section != .visible
+        guard let appState, let section = (superview as? LayoutBarContainer)?.section else {
+            return false
+        }
+        return OverflowFallbackIcon.shouldPreferAppIcon(
+            for: section,
+            appState: appState,
+            cachedImage: cachedImage?.nsImage
+        )
     }
 
     /// Draws the owning app's icon in place of the captured glyph for concealed
