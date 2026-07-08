@@ -13,7 +13,6 @@ build/
 !.github/actions/build/  
 !.github/actions/build/** 
 plans/
-scripts/signing.local.sh
 DerivedData/
 Sparkle
 ThawCtl/.build/
