@@ -456,7 +456,9 @@ final class MenuBarItemSpacingManager {
                     withBundleIdentifier: bundleID
                 ).isEmpty
             }
-            if allBack { break }
+            if allBack {
+                break
+            }
             try? await Task.sleep(for: .milliseconds(100))
         }
 

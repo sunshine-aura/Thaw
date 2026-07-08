@@ -641,7 +641,9 @@ final class MenuBarManager: ObservableObject {
                 let allCaptured = NSScreen.managedScreens.allSatisfy {
                     self.averageColors.keys.contains($0.displayID)
                 }
-                if allCaptured { return }
+                if allCaptured {
+                    return
+                }
             }
         }
     }

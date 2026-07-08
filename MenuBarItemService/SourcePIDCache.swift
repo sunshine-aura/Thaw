@@ -428,7 +428,9 @@ final class SourcePIDCache {
         // a neighbor's slot. The owner check is the real guard.
         let hostedExtrasMatchRadius: CGFloat = 20
         for app in apps {
-            if unresolvedWindows.isEmpty { break }
+            if unresolvedWindows.isEmpty {
+                break
+            }
             guard let appBundleID = app.bundleIdentifier else { continue }
             let candidateWindows = allWindows.filter {
                 unresolvedWindows.contains($0.windowID)

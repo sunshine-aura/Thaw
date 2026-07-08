@@ -226,7 +226,9 @@ final class DisplaySettingsManager: ObservableObject {
             guard let uuid = Bridging.getDisplayUUIDString(for: screen.displayID) else {
                 continue
             }
-            if seeded[uuid] != nil { continue }
+            if seeded[uuid] != nil {
+                continue
+            }
             seeded[uuid] = DisplayIceBarConfiguration
                 .defaultConfiguration
                 .withItemSpacingOffset(offset)

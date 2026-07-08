@@ -1983,7 +1983,11 @@ extension HIDEventManager {
         }
 
         let entries = windowBoundsLock.withLock { $0 }
-        let trustCachedBounds = if #available(macOS 27, *) { true } else { false }
+        let trustCachedBounds = if #available(macOS 27, *) {
+            true
+        } else {
+            false
+        }
         return Self.menuBarBoundsLookupContains(
             mouseLocation,
             entries: entries,

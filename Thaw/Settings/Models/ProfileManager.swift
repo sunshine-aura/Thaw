@@ -303,7 +303,9 @@ final class ProfileManager: ObservableObject {
                 previousProfileID: baseContext.previousID,
                 previousProfileName: baseContext.previousName
             ))
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                return
+            }
             await HookRunner.runIfEnabled(profilePre, context: HookRunner.Context(
                 phase: .pre,
                 scope: .profile,
@@ -312,7 +314,9 @@ final class ProfileManager: ObservableObject {
                 previousProfileID: baseContext.previousID,
                 previousProfileName: baseContext.previousName
             ))
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                return
+            }
 
             // 2. Snapshot apply: push profile settings into the running
             //    app state.

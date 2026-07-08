@@ -67,7 +67,11 @@ struct DisplaySettingsPane: View {
             String(localized: "Apply spacing change?"),
             isPresented: Binding(
                 get: { pendingSpacingApply != nil },
-                set: { if !$0 { pendingSpacingApply = nil } }
+                set: {
+                    if !$0 {
+                        pendingSpacingApply = nil
+                    }
+                }
             ),
             presenting: pendingSpacingApply,
             actions: { pending in spacingConfirmationButtons(for: pending) },
@@ -77,7 +81,11 @@ struct DisplaySettingsPane: View {
             String(localized: "Apply global settings to all displays?"),
             isPresented: Binding(
                 get: { pendingGlobalApply != nil },
-                set: { if !$0 { pendingGlobalApply = nil } }
+                set: {
+                    if !$0 {
+                        pendingGlobalApply = nil
+                    }
+                }
             ),
             presenting: pendingGlobalApply,
             actions: { pending in globalConfirmationButtons(for: pending) },
@@ -86,7 +94,9 @@ struct DisplaySettingsPane: View {
         .alert("Error", isPresented: $showingError) {
             Button("OK") { errorMessage = nil }
         } message: {
-            if let errorMessage { Text(errorMessage) }
+            if let errorMessage {
+                Text(errorMessage)
+            }
         }
     }
 

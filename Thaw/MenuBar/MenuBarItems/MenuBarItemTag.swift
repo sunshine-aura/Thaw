@@ -478,7 +478,11 @@ extension MenuBarItemTag {
     ///
     /// On macOS 26 the hosting process is Control Center; on macOS 27+ it is MenuBarAgent.
     private static var systemHostNamespace: Namespace {
-        if #available(macOS 27, *) { .menuBarAgent } else { .controlCenter }
+        if #available(macOS 27, *) {
+            .menuBarAgent
+        } else {
+            .controlCenter
+        }
     }
 
     /// The tag for the system item that appears in the menu bar

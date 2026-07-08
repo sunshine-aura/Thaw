@@ -69,7 +69,11 @@ struct IceSlider<Value: BinaryFloatingPoint, ValueLabel: View>: View {
         CompactSlider(value: $value, in: bounds, step: step ?? 0)
             .frame(height: height)
             .onContinuousHover { phase in
-                if case .active = phase { isLabelActive = true } else { isLabelActive = false }
+                if case .active = phase {
+                    isLabelActive = true
+                } else {
+                    isLabelActive = false
+                }
             }
             .overlay {
                 HStack(spacing: 4) {

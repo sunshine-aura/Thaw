@@ -35,11 +35,15 @@ final class PlanNotchOverflowTests: XCTestCase {
         alwaysHidden: [String] = []
     ) -> [String] {
         var result = [String]()
-        if let chevron { result.append(chevron) }
+        if let chevron {
+            result.append(chevron)
+        }
         result.append(contentsOf: visible)
         result.append(hiddenCtrl)
         result.append(contentsOf: hidden)
-        if let ahCtrl { result.append(ahCtrl) }
+        if let ahCtrl {
+            result.append(ahCtrl)
+        }
         result.append(contentsOf: alwaysHidden)
         return result
     }

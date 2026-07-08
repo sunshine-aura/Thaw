@@ -221,14 +221,22 @@ private struct SearchResultButtonStyle: ButtonStyle {
     }
 
     private func fillOpacity(isPressed: Bool) -> Double {
-        if isPressed { return 0.65 }
-        if isHovering { return 0.42 }
+        if isPressed {
+            return 0.65
+        }
+        if isHovering {
+            return 0.42
+        }
         return 0
     }
 
     private func accentOpacity(isPressed: Bool) -> Double {
-        if isPressed { return 0.28 }
-        if isHovering { return 0.16 }
+        if isPressed {
+            return 0.28
+        }
+        if isHovering {
+            return 0.16
+        }
         return 0
     }
 }

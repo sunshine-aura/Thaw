@@ -44,7 +44,9 @@ struct ProfileSettingsPane: View {
         .alert("Error", isPresented: $showingError) {
             Button("OK") { errorMessage = nil }
         } message: {
-            if let errorMessage { Text(errorMessage) }
+            if let errorMessage {
+                Text(errorMessage)
+            }
         }
     }
 
