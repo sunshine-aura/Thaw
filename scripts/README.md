@@ -8,10 +8,29 @@ Builds the **Debug** configuration and runs it from `/Applications/Thaw Debug.ap
 
 On macOS 27, menu bar items need a clean code identity and a canonical `/Applications` install path. Running straight from DerivedData can cause Thaw’s own icon to disappear when items are hidden. This script:
 
-1. Builds the Debug scheme
+1. Builds the Debug scheme **signed with your Apple Development team**
 2. Quits any running Thaw Debug instance (app + XPC service)
 3. Replaces `/Applications/Thaw Debug.app` with the fresh build
 4. Launches it
+
+### Signing (one-time setup)
+
+The script must sign with **your** Apple Development identity. Team resolution order:
+
+1. `THAW_DEVELOPMENT_TEAM` environment variable
+2. `scripts/signing.local.sh` (copy from `signing.local.sh.example`; gitignored)
+3. First `Apple Development` identity in your login keychain (auto-detect)
+
+```bash
+cp scripts/signing.local.sh.example scripts/signing.local.sh
+# edit YOUR_TEAM_ID_HERE → your team id from Xcode → Settings → Accounts
+```
+
+One-off override:
+
+```bash
+./scripts/thaw-devrun.sh --team A7CKWF99ML
+```
 
 ```bash
 ./scripts/thaw-devrun.sh

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#
+# Local signing overrides for scripts/thaw-devrun.sh (and other dev scripts).
+# Copy to signing.local.sh — that file is gitignored.
+#
+# Team ID: Xcode → Settings → Accounts → [team] → Team ID
+# Or: security find-identity -v -p codesigning | grep "Apple Development"
+#
+export THAW_DEVELOPMENT_TEAM="YOUR_TEAM_ID_HERE"

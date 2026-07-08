@@ -9,24 +9,63 @@
 # item as `nil`, so the visibility-restriction allowlist can't protect it and
 # Thaw's own icon vanishes whenever anything is hidden.
 #
-# The Debug configuration uses bundle id `com.stonerl.Thaw.debug` (cleanly owned
-# by the building developer's own team — no conflict with the Developer-ID
-# `com.stonerl.Thaw`, which only the release signer can use). This script builds
-# it, quits any running 'Thaw Debug' (the app AND its XPC service), deletes the
-# old `/Applications/Thaw Debug.app`, installs the fresh build, and launches it —
-# no manual quitting or trashing needed, no Developer-ID cert and no release.
+# This script builds with your Apple Development signing identity (see
+# scripts/signing.local.sh.example), quits any running 'Thaw Debug' (the app AND
+# its XPC service), deletes the old `/Applications/Thaw Debug.app`, installs the
+# fresh build, and launches it.
 #
-# Usage: Scripts/thaw-devrun.sh
+# Usage:
+#   ./scripts/thaw-devrun.sh
+#   ./scripts/thaw-devrun.sh --team A7CKWF99ML
+#   THAW_DEVELOPMENT_TEAM=A7CKWF99ML ./scripts/thaw-devrun.sh
 #
 set -euo pipefail
-cd "$(dirname "$0")/.."
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# shellcheck source=lib/signing.sh
+source "${REPO_ROOT}/scripts/lib/signing.sh"
 
 SCHEME="Thaw"
 CONFIG="Debug"
 DEST="/Applications/Thaw Debug.app"
 DEBUG_BUNDLE_ID="com.stonerl.Thaw.debug"
 
+TEAM_OVERRIDE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --team)
+            TEAM_OVERRIDE="${2:?--team requires a team id}"
+            shift 2
+            ;;
+        -h | --help)
+            sed -n '1,22p' "$0" | tail -n +2
+            echo ""
+            signing_setup_hint
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1 (try --help)" >&2
+            exit 2
+            ;;
+    esac
+done
+
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
+
+if [[ -n "$TEAM_OVERRIDE" ]]; then
+    export THAW_DEVELOPMENT_TEAM="$TEAM_OVERRIDE"
+fi
+
+DEVELOPMENT_TEAM=""
+if DEVELOPMENT_TEAM="$(resolve_development_team "$REPO_ROOT")"; then
+    say "Signing with Apple Development team ${DEVELOPMENT_TEAM}"
+else
+    echo "error: no development team configured." >&2
+    echo >&2
+    signing_setup_hint >&2
+    exit 1
+fi
 
 # Quit every running 'Thaw Debug' process — the app AND its MenuBarItemService
 # XPC child — without touching a release `Thaw`. Matches on the install path so
@@ -53,9 +92,16 @@ quit_thaw_debug() {
 
 say "Building ${CONFIG}…"
 xcodebuild -project Thaw.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
-    -destination 'platform=macOS' build >/dev/null
+    -destination 'platform=macOS' \
+    DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+    CODE_SIGN_STYLE=Automatic \
+    "CODE_SIGN_IDENTITY=Apple Development" \
+    build >/dev/null
 
 PRODUCTS_DIR=$(xcodebuild -project Thaw.xcodeproj -scheme "$SCHEME" -configuration "$CONFIG" \
+    DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+    CODE_SIGN_STYLE=Automatic \
+    "CODE_SIGN_IDENTITY=Apple Development" \
     -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2; exit}')
 APP="${PRODUCTS_DIR}/Thaw.app"
 [ -d "$APP" ] || { echo "Build product not found: $APP"; exit 1; }
